@@ -56,10 +56,5 @@
 			<type>2</type>
 			<locationURI>ECLIPSE_HOME/arduinoPlugin/libraries/PubSubClient/2.6.0</locationURI>
 		</link>
-		<link>
-			<name>libraries/SDLogik</name>
-			<type>2</type>
-			<locationURI>ECLIPSE_HOME/arduinoPlugin/packages/esp8266/hardware/esp8266/2.3.0/libraries/SDLogik</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>

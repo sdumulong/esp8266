@@ -24,7 +24,6 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/ESP8266WiFi/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/PubSubClient/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/ESP8266WebServer/src}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/SDLogik}&quot;"/>
 								</option>
 								<inputType id="io.sloeber.compiler.cpp.sketch.input.1561390700" name="CPP source files" superClass="io.sloeber.compiler.cpp.sketch.input"/>
 							</tool>
@@ -35,7 +34,6 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/ESP8266WiFi/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/PubSubClient/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/ESP8266WebServer/src}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/SDLogik}&quot;"/>
 								</option>
 								<inputType id="io.sloeber.compiler.c.sketch.input.1859832835" name="C Source Files" superClass="io.sloeber.compiler.c.sketch.input"/>
 							</tool>
@@ -46,7 +44,6 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/ESP8266WiFi/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/PubSubClient/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/ESP8266WebServer/src}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BedlightV2_1/libraries/SDLogik}&quot;"/>
 								</option>
 								<inputType id="io.sloeber.compiler.S.sketch.input.1821404741" name="Assembly source files" superClass="io.sloeber.compiler.S.sketch.input"/>
 							</tool>

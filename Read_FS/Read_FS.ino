@@ -34,6 +34,18 @@ String strhtml="<html>";
     Serial.println(line);
   }
     file.close();
+    Serial.println("===============================");
+
+    File file2 = SPIFFS.open("/network.txt", "r"); // @suppress("Abstract class cannot be instantiated")
+    if (!file2) {
+      Serial.println("Error opening file");
+      return;
+    }
+    while(file2.available()) {
+    	String line = file2.readStringUntil('\n');
+      Serial.print(line);
+    }
+      file2.close();
     Serial.println("File closed");
 }
 
