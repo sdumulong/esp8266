@@ -38,10 +38,10 @@ String  mqtt_port    	= "";
 String  mqtt_status    	= "Not connected";
 
 //SSID and Password to your ESP Access Point
-const char* APssid = "192.168.4.2";
+const char* APssid   = "BedlightV2";
 const char* password = "12345678";
 
-IPAddress local_IP(192,168,4,1);
+IPAddress local_IP(192,168,4,2);
 IPAddress gateway(192,168,4,255);
 IPAddress subnet(255,255,255,0);
 ESP8266WebServer server(80); //Server on port 80
@@ -156,7 +156,7 @@ void startAccessPoint() {
 	  Serial.print("Soft-AP IP address = ");
 	  Serial.println(WiFi.softAPIP());
 
-	  WiFi.mode(WIFI_AP_STA);       //Both Access point and Wifi client are enabled
+	  WiFi.mode(WIFI_AP_STA);         //Both Access point and Wifi client are enabled
 	  WiFi.softAP(APssid, password);  //Start HOTspot removing password will disable security
 
 	  server.on("/", handleRoot);      //Which routine to handle at root location
