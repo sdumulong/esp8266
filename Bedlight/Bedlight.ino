@@ -44,6 +44,7 @@ int     nb_subscribe_topics;
 String  subscribe_topics[10];
 bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
+String  LocalIP = "To be fix" ;
 
 
 WiFiClient   espClient; // @suppress("Abstract class cannot be instantiated")
@@ -120,9 +121,10 @@ void parseConfigJson(String document)  {
 	config.pwd      = pwd;
 	config.deviceID = deviceID;
 	//if (mqtt == "ON") { config.mqtt = true; } else { config.mqtt = false; }
+	config.mqtt = mqtt == "ON";
 	config.mqtt         = true;
 	config.mqttIP       = mqttIP;
-	config.mqttPort     = 1883;
+	config.mqttPort     = 1883;  // TODO
 	config.mqttUser     = mqttUser;
 	config.mqttPwd      = mqttPwd;
 	config.IPmode       = IPmode;
@@ -130,9 +132,9 @@ void parseConfigJson(String document)  {
 	config.gateway      = gateway;
 	config.subnet       = subnet;
 	config.dns          = dns;
-	config.dns          = mac;
+	config.mac          = mac;
 	config.syslogServer = syslogServer;
-//	config.syslogPort   = syslogPort.toInt();
+	config.syslogPort   = 514;   // TODO
 	config.certPath     = certPath;
 	config.syslog       = false;
 	config.upnp         = false;
@@ -175,7 +177,8 @@ bool fsMounted = SPIFFS.begin();
 //===================================================================================
 void handlePost() {
 void(* resetFunc) (void) = 0; //declare reset function @ address 0
-String parms;
+String jsonConfig;
+String htmlPage = "";
 
    Serial.println("Reception of Data");
 
@@ -202,15 +205,35 @@ String parms;
    doc["ssl"] 			= server.arg("SSL");
    doc["CertPath"] 		= server.arg("CertPath");
 
-   serializeJson(doc, parms);
-   Serial.print(parms);
+   serializeJson(doc, jsonConfig);
 
-   File file = SPIFFS.open("/config.json", "w");  // open the file in write mode // @suppress("Abstract class cannot be instantiated")
-   file.println(parms);
+   bool fsMounted = SPIFFS.begin();
+   if (fsMounted ) {
+    Serial.println("File system mounted with success");
+   } else {
+    Serial.println("Error mounting the file system");
+    return;
+   }
+
+   // Save JSON configuration file
+   File file = SPIFFS.open("/config.json", "w"); // open the file in write mode // @suppress("Abstract class cannot be instantiated")
+   file.println(jsonConfig);
+   file.close();
+
    Serial.println("\nconfig file saved");
 
-   server.send(200, "<! DOCTYPE html>", "<html><body>Saved</body><html>");
-   //resetFunc();
+   if (SPIFFS.exists("/success.html")) {
+    File file = SPIFFS.open("/success.html", "r"); // @suppress("Abstract class cannot be instantiated")
+    if (!file) { Serial.println("Error opening file /success.html"); }
+    Serial.println("\nReading success page");
+      while(file.available()) {
+       htmlPage = htmlPage + file.readStringUntil('\n');
+      }
+       server.send(200, "<! DOCTYPE html>", htmlPage.c_str());
+   }
+   file.close();
+   WiFi.softAPdisconnect (true);
+   resetFunc();
 }
 
 
@@ -289,10 +312,12 @@ const char* ptrmqtt_server = config.mqttIP.c_str();
 // Initialise Subscribed topc
 //********************************************************************************
 void sub_Topics(){
-	nb_subscribe_topics = 3;
- 	subscribe_topics[0] = config.deviceID + "/Status" ;
- 	subscribe_topics[1] = config.deviceID + "/Reset" ;
- 	subscribe_topics[2] = config.deviceID + "/Set" ;
+	 nb_subscribe_topics = 5;
+	 subscribe_topics[0] = config.deviceID + "/Config" ;
+	 subscribe_topics[1] = config.deviceID + "/Reset" ;
+	 subscribe_topics[2] = config.deviceID + "/State" ;
+	 subscribe_topics[3] = config.deviceID + "/Color" ;
+	 subscribe_topics[4] = config.deviceID + "/Restart" ;
 }
 
 
@@ -328,7 +353,7 @@ std::size_t i;
  String msgString = String(message_buff);
 
  if ( debug ) { Serial.println("Topic recu => Payload: " + msgString); }
- //TraiterMessageRecu(topic, msgString);
+ TraiterMessageRecu(topic, msgString);
 }
 
 
@@ -366,12 +391,151 @@ void reconnect() { //Boucle jusqu'à obtenur une reconnexion
 //==================================================================================
 void loop() {
 	server.handleClient();
-	//Serial.printf("Stations connected = %d\n", WiFi.softAPgetStationNum());
-	//delay(3000);
 
 	if (!modeAccessPoint) {
 		if (!client.connected()) { reconnect(); }
 		client.loop();
 	}
 }
+
+
+
+//********************************************************************************
+// Traiter message recu
+//********************************************************************************
+void TraiterMessageRecu(String topic, String payload) {
+void(* resetFunc) (void) = 0; //declare reset function @ address 0
+
+ if (debug) { Serial.println("Topic recu => " + topic + " Payload: " + payload); }
+
+ if (topic == subscribe_topics[0]) { DisplayStatus(); }
+ if (topic == subscribe_topics[1]) {
+     SPIFFS.begin();
+  SPIFFS.remove("/config.json");
+  resetFunc(); }
+ if (topic == subscribe_topics[2]) { SetState(payload); }
+ if (topic == subscribe_topics[3]) { SetColor(payload); }
+ if (topic == subscribe_topics[4]) { resetFunc(); }
+}
+
+
+
+
+//********************************************************************************
+// Display controler status
+//********************************************************************************
+void DisplayStatus() {
+String jsonStatus;
+
+ StaticJsonDocument<1024> doc;
+ doc["SSID"] = config.ssid;
+ doc["Wifi Connection"] = "Established";
+ doc["Local IP"] = LocalIP;
+ doc["AccessPoint IP"] = APssid;
+ doc["Device ID"] = config.deviceID;
+ doc["MQTT"] = "Enabled"; // config.mqtt
+ doc["mqtt IP"] = config.mqttIP;
+ doc["mqtt Port"] = config.mqttPort;
+ doc["mqtt User"] = config.mqttUser;
+ doc["mqtt Password"] = "***************";
+ doc["mqtt status"] = "Established";
+ doc["IP Mode"] = config.IPmode;
+ doc["Statis IP"] = config.staticIP;
+ doc["gateway"] = config.gateway;
+ doc["subnet"] = config.subnet;
+ doc["dns"] = config.dns;
+ doc["mac"] = config.mac;
+ doc["syslog"] = "Disabled"; // config.syslog;
+ doc["syslogServer"] = config.syslogServer;
+ doc["syslogPort"] = config.syslogPort;
+ doc["certPath"] = config.certPath;
+ doc["upnp"] = "Disabled"; // config.upnp
+ doc["api"] = "Disabled"; // config.api
+ doc["ssl"] = "Disabled"; // config.ssl
+ doc["debug"] = "Enabled"; // debug
+ doc["pool delay"] = "30"; // Pooling Time
+ // TODO Add list of topics and list of API
+
+ serializeJson(doc, jsonStatus);
+ serializeJson(doc, Serial);
+
+ client.publish(config.deviceID.c_str(),jsonStatus.c_str());
+}
+
+
+
+
+//********************************************************************************
+// Set State of Peripheral (On/Off)
+//********************************************************************************
+void SetState(String payload) {
+  if (payload == "On") {
+// ReadSetupValues();
+// colorRGB(activeColor);
+// PublishLightStatus();
+     return;
+  }
+  if (payload == "Off") {
+//   activeColor = "#00000000";
+// colorRGB(activeColor);
+// PublishLightStatus();
+     return;
+  }
+}
+
+
+//********************************************************************************
+// Set Color of Light in Hexa format #FFFFFFFF (4 colors)
+//********************************************************************************
+void SetColor(String payload) {
+}
+
+
+//********************************************************************************
+// Save device state
+//********************************************************************************
+void SaveDeviceState() {
+String deviceJson;
+
+ Serial.println("\nSaving device state");
+ bool fsMounted = SPIFFS.begin();
+
+ File file = SPIFFS.open("/device.json", "w"); // @suppress("Abstract class cannot be instantiated")
+ if (!file) { Serial.println("Error opening file /device.json");
+     return;  }
+ Serial.println("Reception of Data");
+ StaticJsonDocument<256> doc;
+ doc["deviceID"] = config.deviceID;
+ doc["timeStamp"] = "TimeStamp";
+ doc["color"] = "Color";
+ doc["poolingTime"]= "30";
+ serializeJson(doc, deviceJson);
+
+ int bytesWritten = file.print(deviceJson);
+ file.close();
+}
+
+
+
+//********************************************************************************
+// Read device state
+//********************************************************************************
+void ReadDeviceLastState() {
+String htmlPage;
+
+ Serial.println("\nconfig file saved");
+
+ bool fsMounted = SPIFFS.begin();
+ if (SPIFFS.exists("/success.html")) {
+  File file = SPIFFS.open("/success.html", "r"); // @suppress("Abstract class cannot be instantiated")
+  if (!file) { Serial.println("Error opening file /success.html"); }
+  Serial.println("\nReading success page");
+
+    while(file.available()) {
+     htmlPage = htmlPage + file.readStringUntil('\n');
+    }
+     server.send(200, "<! DOCTYPE html>", htmlPage.c_str());
+ }
+}
+
 
