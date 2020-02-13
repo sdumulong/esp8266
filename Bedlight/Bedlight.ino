@@ -116,13 +116,14 @@ void parseConfigJson(String document)  {
 	const char* syslogServer = doc["syslogServer"];
 	const char* syslogPort   = doc["syslogPort"];
 	const char* certPath     = doc["certPath"];
+	const char* syslog       = doc["syslog"];
+	const char* upnp         = doc["upnp"];
+	const char* api          = doc["api"];
+	const char* ssl          = doc["ssl"];
 
-	config.ssid     = ssid;
-	config.pwd      = pwd;
-	config.deviceID = deviceID;
-	//if (mqtt == "ON") { config.mqtt = true; } else { config.mqtt = false; }
-	config.mqtt = mqtt == "ON";
-	config.mqtt         = true;
+	config.ssid         = ssid;
+	config.pwd          = pwd;
+	config.deviceID     = deviceID;
 	config.mqttIP       = mqttIP;
 	config.mqttPort     = 1883;  // TODO
 	config.mqttUser     = mqttUser;
@@ -136,11 +137,18 @@ void parseConfigJson(String document)  {
 	config.syslogServer = syslogServer;
 	config.syslogPort   = 514;   // TODO
 	config.certPath     = certPath;
-	config.syslog       = false;
-	config.upnp         = false;
-	config.api		    = false;
-	config.ssl		    = false;
-	config.ssl	        = false;
+	config.mqtt   = true;
+	config.syslog = false;
+	config.upnp   = false;
+	config.api    = true;
+	config.ssl    = false;
+
+//Serial.println(mqtt);
+//Serial.println(config.mqtt);
+//Serial.println(config.syslog);
+//Serial.println(config.upnp);
+//Serial.println(config.api);
+//Serial.println(config.ssl);
 }
 
 
@@ -282,8 +290,8 @@ const char* ptrWifi_password = config.pwd.c_str();
     Serial.print(".");
   }
   Serial.print(" ");
-  Serial.println("Connexion WiFi etablie ");
-  Serial.print("=> Addresse IP : ");
+  Serial.println("\nConnexion WiFi etablie ");
+  Serial.print("Addresse IP : ");
   Serial.println(WiFi.localIP());
 }
 
@@ -339,8 +347,72 @@ void setup_upnp() {
 // Configuration de la connexion API
 //********************************************************************************
 void setup_api() {
+    Serial.println("\nStarting API service.");
+	server.on("/Config" , handleConfig);
+	server.on("/Reset"  , handleReset);
+	server.on("/State"  , handleState);
+	server.on("/Color"  , handleColor);
+	server.on("/Restart", handleRestart);
+	server.begin(); //Start API server
+
+	Serial.println("API server started\n");
 }
 
+
+
+//********************************************************************************
+//
+//********************************************************************************
+void handleConfig() {
+String jsonStatus;
+
+	jsonStatus = CreateJsonStatus();
+    server.send(200, "<! DOCTYPE json>", jsonStatus );
+}
+
+
+//********************************************************************************
+//
+//********************************************************************************
+void handleReset() {
+void(* resetFunc) (void) = 0; //declare reset function @ address 0
+
+    server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Resetting Bedlight</body></html>" );
+	SPIFFS.begin();
+	SPIFFS.remove("/config.json");
+	resetFunc();
+}
+
+
+//********************************************************************************
+//
+//********************************************************************************
+void handleState() {
+String value = "";
+	value = server.arg("value");
+    server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>State changed for " + value + "</body></html>" );
+}
+
+
+//********************************************************************************
+//
+//********************************************************************************
+void handleColor() {
+String value = "";
+	value = server.arg("value");
+    server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Color set to " + value + "</body></html>" );
+
+}
+
+
+//********************************************************************************
+//
+//********************************************************************************
+void handleRestart() {
+void(* resetFunc) (void) = 0; //declare reset function @ address 0
+    server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Restarting Bedlight</body></html>" );
+    resetFunc();
+}
 
 
 //********************************************************************************
@@ -390,11 +462,14 @@ void reconnect() { //Boucle jusqu'à obtenur une reconnexion
 //  Main Loop
 //==================================================================================
 void loop() {
-	server.handleClient();
+	if (modeAccessPoint or config.api) {
+		server.handleClient(); }
 
 	if (!modeAccessPoint) {
-		if (!client.connected()) { reconnect(); }
-		client.loop();
+		if (config.mqtt){
+			if (!client.connected()) { reconnect(); }
+		    client.loop();
+		}
 	}
 }
 
@@ -411,8 +486,8 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
  if (topic == subscribe_topics[0]) { DisplayStatus(); }
  if (topic == subscribe_topics[1]) {
      SPIFFS.begin();
-  SPIFFS.remove("/config.json");
-  resetFunc(); }
+     SPIFFS.remove("/config.json");
+     resetFunc(); }
  if (topic == subscribe_topics[2]) { SetState(payload); }
  if (topic == subscribe_topics[3]) { SetColor(payload); }
  if (topic == subscribe_topics[4]) { resetFunc(); }
@@ -427,41 +502,50 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
 void DisplayStatus() {
 String jsonStatus;
 
- StaticJsonDocument<1024> doc;
- doc["SSID"] = config.ssid;
- doc["Wifi Connection"] = "Established";
- doc["Local IP"] = LocalIP;
- doc["AccessPoint IP"] = APssid;
- doc["Device ID"] = config.deviceID;
- doc["MQTT"] = "Enabled"; // config.mqtt
- doc["mqtt IP"] = config.mqttIP;
- doc["mqtt Port"] = config.mqttPort;
- doc["mqtt User"] = config.mqttUser;
- doc["mqtt Password"] = "***************";
- doc["mqtt status"] = "Established";
- doc["IP Mode"] = config.IPmode;
- doc["Statis IP"] = config.staticIP;
- doc["gateway"] = config.gateway;
- doc["subnet"] = config.subnet;
- doc["dns"] = config.dns;
- doc["mac"] = config.mac;
- doc["syslog"] = "Disabled"; // config.syslog;
- doc["syslogServer"] = config.syslogServer;
- doc["syslogPort"] = config.syslogPort;
- doc["certPath"] = config.certPath;
- doc["upnp"] = "Disabled"; // config.upnp
- doc["api"] = "Disabled"; // config.api
- doc["ssl"] = "Disabled"; // config.ssl
- doc["debug"] = "Enabled"; // debug
- doc["pool delay"] = "30"; // Pooling Time
- // TODO Add list of topics and list of API
-
- serializeJson(doc, jsonStatus);
- serializeJson(doc, Serial);
-
- client.publish(config.deviceID.c_str(),jsonStatus.c_str());
+	jsonStatus = CreateJsonStatus();
+	client.publish(config.deviceID.c_str(),jsonStatus.c_str());
 }
 
+
+
+
+//********************************************************************************
+// Create JSON Status
+//********************************************************************************
+String CreateJsonStatus() {
+String jsonStatus;
+ 	 StaticJsonDocument<1024> doc;
+ 	 doc["SSID"] = config.ssid;
+ 	 doc["Wifi Connection"] = "Established";
+ 	 doc["Local IP"] = LocalIP;
+ 	 doc["AccessPoint IP"] = APssid;
+ 	 doc["Device ID"] = config.deviceID;
+ 	 doc["MQTT"] = "Enabled"; // config.mqtt
+ 	 doc["mqtt IP"] = config.mqttIP;
+ 	 doc["mqtt Port"] = config.mqttPort;
+ 	 doc["mqtt User"] = config.mqttUser;
+ 	 doc["mqtt Password"] = "***************";
+ 	 doc["mqtt status"] = "Established";
+ 	 doc["IP Mode"] = config.IPmode;
+ 	 doc["Statis IP"] = config.staticIP;
+ 	 doc["gateway"] = config.gateway;
+ 	 doc["subnet"] = config.subnet;
+ 	 doc["dns"] = config.dns;
+ 	 doc["mac"] = config.mac;
+ 	 doc["syslog"] = "Disabled"; // config.syslog;
+ 	 doc["syslogServer"] = config.syslogServer;
+ 	 doc["syslogPort"] = config.syslogPort;
+ 	 doc["certPath"] = config.certPath;
+ 	 doc["upnp"] = "Disabled"; // config.upnp
+ 	 doc["api"] = "Disabled"; // config.api
+ 	 doc["ssl"] = "Disabled"; // config.ssl
+ 	 doc["debug"] = "Enabled"; // debug
+ 	 doc["pool delay"] = "30"; // Pooling Time
+ 	 	 // TODO Add list of topics and list of API
+
+ 	 serializeJson(doc, jsonStatus);
+ 	 return jsonStatus;
+}
 
 
 
