@@ -61,5 +61,10 @@
 			<type>2</type>
 			<locationURI>ECLIPSE_HOME/arduinoPlugin/libraries/PubSubClient/2.6.0</locationURI>
 		</link>
+		<link>
+			<name>libraries/Syslog-master</name>
+			<type>2</type>
+			<location>//NAS/home/Documents/Arduino/libraries/Syslog-master</location>
+		</link>
 	</linkedResources>
 </projectDescription>

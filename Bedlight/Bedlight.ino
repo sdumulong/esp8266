@@ -3,36 +3,40 @@
 #include <PubSubClient.h>
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
+#include <WiFiUdp.h>
+#include <Syslog.h>
+
 
 struct struct_config {
- String ssid;
- String pwd;
- String deviceID;
- bool mqtt;
- String mqttIP;
- int mqttPort;
- String mqttUser;
- String mqttPwd;
- String IPmode;
- String staticIP;
- String gateway;
- String subnet;
- String dns;
- String mac;
- bool syslog;
- String syslogServer;
- int syslogPort;
- bool upnp;
- bool api;
- bool ssl;
- String certPath;
+	const char* ssid;
+	const char* pwd;
+	const char* deviceID;
+	bool mqtt;
+	const char* mqttIP;
+	int mqttPort;
+	const char* mqttUser;
+	const char* mqttPwd;
+	const char* IPmode;
+	const char* staticIP;
+	const char* gateway;
+	const char* subnet;
+	const char* dns;
+	const char* mac;
+	bool syslog;
+	const char* syslogServer;
+	int syslogPort;
+	bool upnp;
+	bool api;
+	bool ssl;
+	const char* certPath;
 };
 
-#define     SERIAL_BAUDRATE	115200
+#define     SERIAL_BAUDRATE	19200
 bool   debug       = true; //Affiche sur la console si True
 struct struct_config config;
 
 const char* APssid   = "BedlightV3";
+IPAddress ip;
 
 IPAddress local_IP(192,168,4,3);
 IPAddress gateway(192,168,4,255);
@@ -44,11 +48,13 @@ int     nb_subscribe_topics;
 String  subscribe_topics[10];
 bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
-String  LocalIP = "To be fix" ;
 
-
-WiFiClient   espClient; // @suppress("Abstract class cannot be instantiated")
+WiFiUDP      udpClient;  // @suppress("Abstract class cannot be instantiated")
+WiFiClient   espClient;  // @suppress("Abstract class cannot be instantiated")
 PubSubClient client(espClient);
+Syslog syslog(udpClient, config.syslogServer, config.syslogPort, config.deviceID, config.deviceID, LOG_KERN);
+
+
 
 //===================================================================================
 // Setup procedure
@@ -59,7 +65,6 @@ void setup() {
 	Serial.println('\n');
 
 	SPIFFS.begin();
-	//SPIFFS.remove("/config.json");
 	if (!SPIFFS.exists("/config.json")) {
 		startAccessPoint();
 	} else {
@@ -85,7 +90,7 @@ bool fsMounted = SPIFFS.begin();
 
  File file = SPIFFS.open("/config.json", "r"); // @suppress("Abstract class cannot be instantiated")
  if (!file) { Serial.println("Error opening file"); }
- Serial.println("\nReading config file");
+ Serial.println("Reading config file");
  parseConfigJson(file.readStringUntil('\n'));
 }
 
@@ -95,60 +100,34 @@ bool fsMounted = SPIFFS.begin();
 // Parse JSON read from FS
 //==================================================================================
 void parseConfigJson(String document)  {
-	Serial.println("\nParsing config file");
-	Serial.println(document);
+	Serial.println("Parsing config file");
 
-	StaticJsonDocument<512> doc;
+	StaticJsonDocument<1152> doc;
 	deserializeJson(doc, document);
-	const char* ssid         = doc["ssid"];
-	const char* pwd          = doc["pwd"];
-	const char* deviceID     = doc["deviceID"];
-	const char* mqtt         = doc["mqtt"];
-	const char* mqttIP       = doc["mqttIP"];
-	const char* mqttUser     = doc["mqttUser"];
-	const char* mqttPwd      = doc["mqttPwd"];
-	const char* IPmode       = doc["IPmode"];
-	const char* staticIP     = doc["staticIP"];
-	const char* gateway      = doc["gateway"];
-	const char* subnet       = doc["subnet"];
-	const char* dns          = doc["dns"];
-	const char* mac          = doc["mac"];
-	const char* syslogServer = doc["syslogServer"];
-	const char* syslogPort   = doc["syslogPort"];
-	const char* certPath     = doc["certPath"];
-	const char* syslog       = doc["syslog"];
-	const char* upnp         = doc["upnp"];
-	const char* api          = doc["api"];
-	const char* ssl          = doc["ssl"];
+    Serial.print(document);
+	config.ssid         = doc["ssid"];
+	config.pwd          = doc["pwd"];
+	config.deviceID     = doc["deviceID"];
+	config.mqttIP       = doc["mqttIP"];
+	config.mqttUser     = doc["mqttUser"];
+	config.mqttPwd      = doc["mqttPwd"];
+	config.IPmode       = doc["IPmode"];
+	config.staticIP     = doc["staticIP"];
+	config.gateway      = doc["gateway"];
+	config.subnet       = doc["subnet"];
+	config.dns          = doc["dns"];
+	config.mac          = doc["mac"];
+	config.syslogServer = doc["syslogServer"];
+	config.certPath     = doc["certPath"];
+	config.mqttPort     = atoi(doc["mqttPort"]);
+	config.syslogPort   = atoi(doc["syslogPort"]);
+	config.mqtt         = strstr( doc["mqtt"]  , "ON");
+	config.syslog 		= strstr( doc["syslog"], "ON");
+	config.upnp   		= strstr( doc["upnp"]  , "ON");
+	config.api    		= strstr( doc["api"]   , "ON");
+	config.ssl    		= strstr( doc["ssl"]   , "ON");
 
-	config.ssid         = ssid;
-	config.pwd          = pwd;
-	config.deviceID     = deviceID;
-	config.mqttIP       = mqttIP;
-	config.mqttPort     = 1883;  // TODO
-	config.mqttUser     = mqttUser;
-	config.mqttPwd      = mqttPwd;
-	config.IPmode       = IPmode;
-	config.staticIP     = staticIP;
-	config.gateway      = gateway;
-	config.subnet       = subnet;
-	config.dns          = dns;
-	config.mac          = mac;
-	config.syslogServer = syslogServer;
-	config.syslogPort   = 514;   // TODO
-	config.certPath     = certPath;
-	config.mqtt   = true;
-	config.syslog = false;
-	config.upnp   = false;
-	config.api    = true;
-	config.ssl    = false;
-
-//Serial.println(mqtt);
-//Serial.println(config.mqtt);
-//Serial.println(config.syslog);
-//Serial.println(config.upnp);
-//Serial.println(config.api);
-//Serial.println(config.ssl);
+	Serial.println(	config.certPath);
 }
 
 
@@ -181,7 +160,7 @@ bool fsMounted = SPIFFS.begin();
 
 
 //===================================================================================
-//     This rutine is exicuted when you open its IP in browser
+//     This routine is executed when you open its IP in browser
 //===================================================================================
 void handlePost() {
 void(* resetFunc) (void) = 0; //declare reset function @ address 0
@@ -275,15 +254,13 @@ void startAccessPoint() {
 //Connexion au réseau WiFi
 //********************************************************************************
 void setup_wifi() {
-const char* ptrWifi_ssid = config.ssid.c_str();
-const char* ptrWifi_password = config.pwd.c_str();
 
   delay(10);
   Serial.println();
   Serial.print("Connecting to :");
   Serial.print(config.ssid);
   Serial.print(" ");
-  WiFi.begin(ptrWifi_ssid, ptrWifi_password);
+  WiFi.begin(config.ssid, config.pwd);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -293,6 +270,7 @@ const char* ptrWifi_password = config.pwd.c_str();
   Serial.println("\nConnexion WiFi etablie ");
   Serial.print("Addresse IP : ");
   Serial.println(WiFi.localIP());
+  ip = WiFi.localIP();
 }
 
 
@@ -308,11 +286,13 @@ void setup_ssl() {
 // Configuration de la connexion MQTT
 //********************************************************************************
 void setup_mqtt() {
-const char* ptrmqtt_server = config.mqttIP.c_str();
+const char* ptrmqtt_server = config.mqttIP;
+  syslog.log(LOG_INFO, "Begin loop");
+  syslog.logf(LOG_INFO, "This is info message no. %d", 1);
 
- client.setServer(ptrmqtt_server, config.mqttPort); //Configuration de la connexion au serveur MQTT
- client.setCallback(callback); //La fonction de callback qui est executée à chaque réception de message
- sub_Topics();
+  client.setServer(ptrmqtt_server, config.mqttPort); //Configuration de la connexion au serveur MQTT
+  client.setCallback(callback); //La fonction de callback qui est executée à chaque réception de message
+  sub_Topics();
 }
 
 
@@ -321,11 +301,11 @@ const char* ptrmqtt_server = config.mqttIP.c_str();
 //********************************************************************************
 void sub_Topics(){
 	 nb_subscribe_topics = 5;
-	 subscribe_topics[0] = config.deviceID + "/Config" ;
-	 subscribe_topics[1] = config.deviceID + "/Reset" ;
-	 subscribe_topics[2] = config.deviceID + "/State" ;
-	 subscribe_topics[3] = config.deviceID + "/Color" ;
-	 subscribe_topics[4] = config.deviceID + "/Restart" ;
+	 subscribe_topics[0] = String(config.deviceID) + "/Config" ;
+	 subscribe_topics[1] = String(config.deviceID) + "/Reset"  ;
+	 subscribe_topics[2] = String(config.deviceID) + "/State"  ;
+	 subscribe_topics[3] = String(config.deviceID) + "/Color"  ;
+	 subscribe_topics[4] = String(config.deviceID) + "/Restart";
 }
 
 
@@ -333,6 +313,7 @@ void sub_Topics(){
 // Configuration de la connexion Syslog
 //********************************************************************************
 void setup_syslog() {
+
 }
 
 
@@ -424,7 +405,6 @@ std::size_t i;
  message_buff[i] = '\0';
  String msgString = String(message_buff);
 
- if ( debug ) { Serial.println("Topic recu => Payload: " + msgString); }
  TraiterMessageRecu(topic, msgString);
 }
 
@@ -439,7 +419,7 @@ void reconnect() { //Boucle jusqu'à obtenur une reconnexion
   while (!client.connected()) {
     Serial.print("MQTT Connecxion...");
 
-    if (client.connect(config.ssid.c_str())) {
+    if (client.connect(config.ssid)) {
       Serial.println("OK");
       mqtt_status = "Connected";
       for (int i=0; i<nb_subscribe_topics; i++) {
@@ -490,7 +470,7 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
      resetFunc(); }
  if (topic == subscribe_topics[2]) { SetState(payload); }
  if (topic == subscribe_topics[3]) { SetColor(payload); }
- if (topic == subscribe_topics[4]) { resetFunc(); }
+ if (topic == subscribe_topics[4]) { resetFunc();       }
 }
 
 
@@ -503,7 +483,7 @@ void DisplayStatus() {
 String jsonStatus;
 
 	jsonStatus = CreateJsonStatus();
-	client.publish(config.deviceID.c_str(),jsonStatus.c_str());
+	client.publish(config.deviceID,jsonStatus.c_str());
 }
 
 
@@ -514,33 +494,34 @@ String jsonStatus;
 //********************************************************************************
 String CreateJsonStatus() {
 String jsonStatus;
- 	 StaticJsonDocument<1024> doc;
- 	 doc["SSID"] = config.ssid;
- 	 doc["Wifi Connection"] = "Established";
- 	 doc["Local IP"] = LocalIP;
- 	 doc["AccessPoint IP"] = APssid;
- 	 doc["Device ID"] = config.deviceID;
- 	 doc["MQTT"] = "Enabled"; // config.mqtt
- 	 doc["mqtt IP"] = config.mqttIP;
- 	 doc["mqtt Port"] = config.mqttPort;
- 	 doc["mqtt User"] = config.mqttUser;
- 	 doc["mqtt Password"] = "***************";
- 	 doc["mqtt status"] = "Established";
- 	 doc["IP Mode"] = config.IPmode;
- 	 doc["Statis IP"] = config.staticIP;
- 	 doc["gateway"] = config.gateway;
- 	 doc["subnet"] = config.subnet;
- 	 doc["dns"] = config.dns;
- 	 doc["mac"] = config.mac;
- 	 doc["syslog"] = "Disabled"; // config.syslog;
- 	 doc["syslogServer"] = config.syslogServer;
- 	 doc["syslogPort"] = config.syslogPort;
- 	 doc["certPath"] = config.certPath;
- 	 doc["upnp"] = "Disabled"; // config.upnp
- 	 doc["api"] = "Disabled"; // config.api
- 	 doc["ssl"] = "Disabled"; // config.ssl
- 	 doc["debug"] = "Enabled"; // debug
- 	 doc["pool delay"] = "30"; // Pooling Time
+ 	 StaticJsonDocument<2048> doc;
+ 	 doc["SSID"]             = config.ssid;
+ 	 doc["Wifi Connection"]  = "Established";
+ 	 doc["Local IP"]         = ip.toString();
+ 	 doc["AccessPoint SSID"] = APssid;
+ 	 doc["AccessPoint IP"]   = local_IP.toString();
+ 	 doc["Device ID"]        = config.deviceID;
+ 	 doc["mqtt"]             = config.mqtt; ; // config.mqtt
+ 	 doc["mqtt IP"]          = config.mqttIP;
+ 	 doc["mqtt Port"]        = config.mqttPort;
+ 	 doc["mqtt User"]        = config.mqttUser;
+ 	 doc["mqtt Password"]    = "***************";
+ 	 doc["mqtt status"]      = mqtt_status;
+ 	 doc["IP Mode"]          = config.IPmode;
+ 	 doc["Static IP"]        = config.staticIP;
+ 	 doc["gateway"]          = config.gateway;
+ 	 doc["subnet"]           = config.subnet;
+ 	 doc["dns"]              = config.dns;
+ 	 doc["mac"]              = config.mac;
+ 	 doc["syslog"]           = config.syslog;  // config.syslog;
+ 	 doc["syslogServer"]     = config.syslogServer;
+ 	 doc["syslogPort"]       = config.syslogPort;
+ 	 doc["certPath"]         = config.certPath;
+ 	 doc["upnp"]             = config.upnp; // config.upnp
+ 	 doc["api"]              = config.api; // config.api
+ 	 doc["ssl"]              = config.ssl; // config.ssl
+ 	 doc["debug"]            = debug; // debug
+ 	 doc["pool delay"]       = 30; // Pooling Time
  	 	 // TODO Add list of topics and list of API
 
  	 serializeJson(doc, jsonStatus);
@@ -607,19 +588,21 @@ String deviceJson;
 void ReadDeviceLastState() {
 String htmlPage;
 
- Serial.println("\nconfig file saved");
+  Serial.println("\nconfig file saved");
 
- bool fsMounted = SPIFFS.begin();
- if (SPIFFS.exists("/success.html")) {
-  File file = SPIFFS.open("/success.html", "r"); // @suppress("Abstract class cannot be instantiated")
-  if (!file) { Serial.println("Error opening file /success.html"); }
-  Serial.println("\nReading success page");
+  bool fsMounted = SPIFFS.begin();
+  if (fsMounted) {
+	 if (SPIFFS.exists("/success.html")) {
+		 File file = SPIFFS.open("/success.html", "r"); // @suppress("Abstract class cannot be instantiated")
+		 if (!file) { Serial.println("Error opening file /success.html"); }
+		 Serial.println("\nReading success page");
 
-    while(file.available()) {
-     htmlPage = htmlPage + file.readStringUntil('\n');
-    }
-     server.send(200, "<! DOCTYPE html>", htmlPage.c_str());
- }
+		 while(file.available()) {
+			 htmlPage = htmlPage + file.readStringUntil('\n');
+		 }
+		 server.send(200, "<! DOCTYPE html>", htmlPage.c_str());
+	 }
+  }
 }
 
 
