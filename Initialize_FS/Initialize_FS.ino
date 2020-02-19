@@ -5,7 +5,7 @@
 //===================================================================================
 void setup() {
 
- Serial.begin(115200); // Start the Serial communication to send messages to the computer
+ Serial.begin(19200); // Start the Serial communication to send messages to the computer
  delay(10);
  Serial.println('\n');
 

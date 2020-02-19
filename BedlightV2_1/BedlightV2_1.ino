@@ -249,7 +249,7 @@ void SaveSetupValues(String Color) {
 	  SPIFFS.begin();
 	  if (SPIFFS.exists("/setupValues.txt")) { SPIFFS.remove("/lightValues.txt"); }
 
-      File f = SPIFFS.open("/setupValues.txt", "w");  // open the file in write mode
+      File f = SPIFFS.open("/setupValues.txt", "w");  // open the file in write mode // @suppress("Abstract class cannot be instantiated")
 
 	  if (!f) {
 	    	Serial.println("file setupValues.txt creation failed");
@@ -274,7 +274,7 @@ void ReadSetupValues() {
 
 	 SPIFFS.begin();
 	 if (SPIFFS.exists("/setupValues.txt")) {
-		  File f = SPIFFS.open("/setupValues.txt", "r");
+		  File f = SPIFFS.open("/setupValues.txt", "r"); // @suppress("Abstract class cannot be instantiated")
 		  Serial.println("\nReading setup file...");
 		    while(f.available()) {
 		    	String line = f.readStringUntil('\n');
@@ -309,12 +309,12 @@ void ReadSetupValues() {
 void saveNetworkSetup(String ssid, String pwd, String mqttid, String mqttip, String mqttport) {
 
 	  SPIFFS.begin();
-	  File f = SPIFFS.open("/network.txt", "r");
+	  File f = SPIFFS.open("/network.txt", "r"); // @suppress("Abstract class cannot be instantiated")
 
 	  if (SPIFFS.exists("/network.txt")) { SPIFFS.remove("/network.txt"); }
 
 	  if (!f) {
-	    File f = SPIFFS.open("/network.txt", "w");  // open the file in write mode
+	    File f = SPIFFS.open("/network.txt", "w");  // open the file in write mode // @suppress("Abstract class cannot be instantiated")
 
 	    if (!f) {
 	    	Serial.println("file creation failed");
@@ -339,7 +339,7 @@ bool ReadNetworkSetup() {
 //	  SPIFFS.remove("/network.txt");
 //	  Serial.println("Looking for network config file...");
 	  if (SPIFFS.exists("/network.txt")) {
-		  File f = SPIFFS.open("/network.txt", "r");
+		  File f = SPIFFS.open("/network.txt", "r"); // @suppress("Abstract class cannot be instantiated")
 		  Serial.println("Reading network config file...");
 		    while(f.available()) {
 		    	String line = f.readStringUntil('\n');
@@ -527,6 +527,7 @@ void colorRGB(String HexValue){
   int r = number >> 16;
   int g = number >> 8 & 0xFF;
   int b = number & 0xFF;
+
 
   analogWrite(ChannelRed,constrain(r,0,255));
   analogWrite(ChannelGreen,constrain(g,0,255));

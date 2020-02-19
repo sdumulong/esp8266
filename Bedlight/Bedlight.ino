@@ -3,7 +3,6 @@
 #include <PubSubClient.h>
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
-#include <WiFiUdp.h>
 #include <Syslog.h>
 
 
@@ -49,11 +48,8 @@ String  subscribe_topics[10];
 bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
 
-WiFiUDP      udpClient;  // @suppress("Abstract class cannot be instantiated")
 WiFiClient   espClient;  // @suppress("Abstract class cannot be instantiated")
 PubSubClient client(espClient);
-Syslog syslog(udpClient, config.syslogServer, config.syslogPort, config.deviceID, config.deviceID, LOG_KERN);
-
 
 
 //===================================================================================
@@ -286,12 +282,8 @@ void setup_ssl() {
 // Configuration de la connexion MQTT
 //********************************************************************************
 void setup_mqtt() {
-const char* ptrmqtt_server = config.mqttIP;
-  syslog.log(LOG_INFO, "Begin loop");
-  syslog.logf(LOG_INFO, "This is info message no. %d", 1);
-
-  client.setServer(ptrmqtt_server, config.mqttPort); //Configuration de la connexion au serveur MQTT
-  client.setCallback(callback); //La fonction de callback qui est executée à chaque réception de message
+  client.setServer(config.mqttIP, config.mqttPort); //Configuration de la connexion au serveur MQTT
+  client.setCallback(callback);                     //La fonction de callback qui est executée à chaque réception de message
   sub_Topics();
 }
 
@@ -335,7 +327,6 @@ void setup_api() {
 	server.on("/Color"  , handleColor);
 	server.on("/Restart", handleRestart);
 	server.begin(); //Start API server
-
 	Serial.println("API server started\n");
 }
 
@@ -401,11 +392,11 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
 //********************************************************************************
 void callback(char* topic, byte* payload, unsigned int length) {
 std::size_t i;
- for(i=0; i<length; i++) { message_buff[i] = payload[i]; }
- message_buff[i] = '\0';
- String msgString = String(message_buff);
+  for(i=0; i<length; i++) { message_buff[i] = payload[i]; }
+  message_buff[i] = '\0';
+  String msgString = String(message_buff);
 
- TraiterMessageRecu(topic, msgString);
+  TraiterMessageRecu(topic, msgString);
 }
 
 
@@ -501,7 +492,7 @@ String jsonStatus;
  	 doc["AccessPoint SSID"] = APssid;
  	 doc["AccessPoint IP"]   = local_IP.toString();
  	 doc["Device ID"]        = config.deviceID;
- 	 doc["mqtt"]             = config.mqtt; ; // config.mqtt
+ 	 doc["mqtt"]             = config.mqtt; ;
  	 doc["mqtt IP"]          = config.mqttIP;
  	 doc["mqtt Port"]        = config.mqttPort;
  	 doc["mqtt User"]        = config.mqttUser;
@@ -513,16 +504,15 @@ String jsonStatus;
  	 doc["subnet"]           = config.subnet;
  	 doc["dns"]              = config.dns;
  	 doc["mac"]              = config.mac;
- 	 doc["syslog"]           = config.syslog;  // config.syslog;
+ 	 doc["syslog"]           = config.syslog;
  	 doc["syslogServer"]     = config.syslogServer;
  	 doc["syslogPort"]       = config.syslogPort;
  	 doc["certPath"]         = config.certPath;
- 	 doc["upnp"]             = config.upnp; // config.upnp
- 	 doc["api"]              = config.api; // config.api
- 	 doc["ssl"]              = config.ssl; // config.ssl
- 	 doc["debug"]            = debug; // debug
- 	 doc["pool delay"]       = 30; // Pooling Time
- 	 	 // TODO Add list of topics and list of API
+ 	 doc["upnp"]             = config.upnp;
+ 	 doc["api"]              = config.api;
+ 	 doc["ssl"]              = config.ssl;
+ 	 doc["debug"]            = debug;
+ 	 doc["pool delay"]       = 30;
 
  	 serializeJson(doc, jsonStatus);
  	 return jsonStatus;
@@ -553,6 +543,7 @@ void SetState(String payload) {
 // Set Color of Light in Hexa format #FFFFFFFF (4 colors)
 //********************************************************************************
 void SetColor(String payload) {
+	Serial.print(payload);
 }
 
 
@@ -564,20 +555,22 @@ String deviceJson;
 
  Serial.println("\nSaving device state");
  bool fsMounted = SPIFFS.begin();
+ if (fsMounted) {
+	 File file = SPIFFS.open("/device.json", "w"); // @suppress("Abstract class cannot be instantiated")
+	 if (!file) { Serial.println("Error opening file /device.json");
+     	 return;  }
+	 Serial.println("Reception of Data");
+	 StaticJsonDocument<256> doc;
+	 doc["deviceID"] = config.deviceID;
+	 doc["timeStamp"] = "TimeStamp";
+	 doc["color"] = "Color";
+	 doc["poolingTime"]= "30";
+	 serializeJson(doc, deviceJson);
 
- File file = SPIFFS.open("/device.json", "w"); // @suppress("Abstract class cannot be instantiated")
- if (!file) { Serial.println("Error opening file /device.json");
-     return;  }
- Serial.println("Reception of Data");
- StaticJsonDocument<256> doc;
- doc["deviceID"] = config.deviceID;
- doc["timeStamp"] = "TimeStamp";
- doc["color"] = "Color";
- doc["poolingTime"]= "30";
- serializeJson(doc, deviceJson);
-
- int bytesWritten = file.print(deviceJson);
- file.close();
+	 file.print(deviceJson);
+//	 int bytesWritten = file.print(deviceJson);
+	 file.close();
+ }
 }
 
 
