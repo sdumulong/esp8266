@@ -1,10 +1,16 @@
-#include <FS.h>  // Include the SPIFFS library
+#include <FS.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
+#include <ESP8266mDNS.h>
 #include <Syslog.h>
 
+#ifdef DEBUG_ESP_PORT
+#define DEBUG_MSG(...) DEBUG_ESP_PORT.printf( __VA_ARGS__ )
+#else
+#define DEBUG_MSG(...)
+#endif
 
 struct struct_config {
 	const char* ssid;
@@ -33,6 +39,7 @@ struct struct_config {
 #define     SERIAL_BAUDRATE	19200
 bool   debug       = true; //Affiche sur la console si True
 struct struct_config config;
+int serverPort = 80;
 
 const char* APssid   = "BedlightV3";
 IPAddress ip;
@@ -40,16 +47,19 @@ IPAddress ip;
 IPAddress local_IP(192,168,4,3);
 IPAddress gateway(192,168,4,255);
 IPAddress subnet(255,255,255,0);
-ESP8266WebServer server(80); //Server on port 80
+ESP8266WebServer server(serverPort); //Server on port
 
 char    message_buff[100];
 int     nb_subscribe_topics;
 String  subscribe_topics[10];
 bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
+unsigned long lastMsg   = 0;    //Horodatage du dernier message publié sur MQTT
+String  activeColor = "#000000";  //Light Value
 
-WiFiClient   espClient;  // @suppress("Abstract class cannot be instantiated")
-PubSubClient client(espClient);
+WiFiClient    espClient;  // @suppress("Abstract class cannot be instantiated")
+PubSubClient  client(espClient);
+MDNSResponder mdns;
 
 
 //===================================================================================
@@ -59,9 +69,11 @@ void setup() {
 	Serial.begin(SERIAL_BAUDRATE);   //Facultatif pour le debug
 	delay(10);
 	Serial.println('\n');
+    DEBUG_MSG("bootup...\n");
 
 	SPIFFS.begin();
 	if (!SPIFFS.exists("/config.json")) {
+		mdns.begin("ESP8266-Setup",local_IP);
 		startAccessPoint();
 	} else {
 		readConfigFile();
@@ -100,7 +112,7 @@ void parseConfigJson(String document)  {
 
 	StaticJsonDocument<1152> doc;
 	deserializeJson(doc, document);
-    Serial.print(document);
+//    Serial.print(document);
 	config.ssid         = doc["ssid"];
 	config.pwd          = doc["pwd"];
 	config.deviceID     = doc["deviceID"];
@@ -267,6 +279,8 @@ void setup_wifi() {
   Serial.print("Addresse IP : ");
   Serial.println(WiFi.localIP());
   ip = WiFi.localIP();
+  if(mdns.begin(config.deviceID),WiFi.localIP())
+	  Serial.println("\nmDNS Responder Started on " + String(config.deviceID));
 }
 
 
@@ -321,6 +335,7 @@ void setup_upnp() {
 //********************************************************************************
 void setup_api() {
     Serial.println("\nStarting API service.");
+	server.on("/"       , handleRootDevice);
 	server.on("/Config" , handleConfig);
 	server.on("/Reset"  , handleReset);
 	server.on("/State"  , handleState);
@@ -328,6 +343,17 @@ void setup_api() {
 	server.on("/Restart", handleRestart);
 	server.begin(); //Start API server
 	Serial.println("API server started\n");
+	MDNS.addService("http", "tcp", serverPort);
+}
+
+
+
+//********************************************************************************
+//
+//********************************************************************************
+void handleRootDevice() {
+    Serial.println("Root request");
+    server.send(200, "<! DOCTYPE json>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Device " + String(config.deviceID) +" is listening</body></html>" );
 }
 
 
@@ -338,6 +364,7 @@ void setup_api() {
 void handleConfig() {
 String jsonStatus;
 
+	Serial.println("Config request");
 	jsonStatus = CreateJsonStatus();
     server.send(200, "<! DOCTYPE json>", jsonStatus );
 }
@@ -349,6 +376,7 @@ String jsonStatus;
 void handleReset() {
 void(* resetFunc) (void) = 0; //declare reset function @ address 0
 
+	Serial.println("Reset request");
     server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Resetting Bedlight</body></html>" );
 	SPIFFS.begin();
 	SPIFFS.remove("/config.json");
@@ -361,6 +389,8 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
 //********************************************************************************
 void handleState() {
 String value = "";
+
+	Serial.println("State request");
 	value = server.arg("value");
     server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>State changed for " + value + "</body></html>" );
 }
@@ -371,6 +401,7 @@ String value = "";
 //********************************************************************************
 void handleColor() {
 String value = "";
+	Serial.println("Color request");
 	value = server.arg("value");
     server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Color set to " + value + "</body></html>" );
 
@@ -382,6 +413,8 @@ String value = "";
 //********************************************************************************
 void handleRestart() {
 void(* resetFunc) (void) = 0; //declare reset function @ address 0
+
+	Serial.println("Restart request");
     server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Restarting Bedlight</body></html>" );
     resetFunc();
 }
@@ -441,8 +474,37 @@ void loop() {
 			if (!client.connected()) { reconnect(); }
 		    client.loop();
 		}
+		unsigned long now = millis();
+		if (now - lastMsg > (1000 * 30)) {
+			lastMsg = now;
+			PublishLightStatus();
+		}
 	}
 }
+
+
+
+//****************************************************************************
+// Publishing Light Status
+//****************************************************************************
+void PublishLightStatus() {
+String topic =  "StartrekLight/Light";
+String strStatus = "Off";
+String strState  = "0";
+String strColor  = "";
+
+	if (strColor != "#000000") {
+		strStatus = "On";
+		strState = "1";
+	}
+	String strStatus2 = "{\n\"Status\" : \""  + strStatus +
+                        "\",\n\"State\" : \"" + strState  +
+                        "\",\n\"Color\" : \"" + strColor  +
+                        "\"\n} " ;
+
+	client.publish(config.deviceID, (char*) strStatus2.c_str());
+}
+
 
 
 
@@ -544,7 +606,40 @@ void SetState(String payload) {
 //********************************************************************************
 void SetColor(String payload) {
 	Serial.print(payload);
+	if (payload.substring(0,1) == "#") {
+		activeColor = payload;
+//		SaveSetupValues(activeColor);
+	  	colorRGB(activeColor);
+//	  	PublishLightStatus();
+	  	Serial.println("New Color " + activeColor );
+	  	return;
+	}
 }
+
+
+
+
+//****************************************************************************
+// Turn LED to Received color
+//****************************************************************************
+void colorRGB(String HexValue){
+
+  Serial.print("colorRGB ");
+  Serial.println(HexValue);
+
+  unsigned long number = (unsigned long) strtoul( &HexValue[1], NULL, 16);
+
+  int subStringR = number >> 24;
+  int subStringG = number >> 16 & 0xFF;
+  int subStringB = number >> 8 & 0xFF;
+  int subStringW = number & 0xFF;
+
+  analogWrite(D1,subStringR);
+  analogWrite(D2,subStringG);
+  analogWrite(D3,subStringB);
+//analogWrite(D4,constrain(subStringW,0,255));
+}
+
 
 
 //********************************************************************************
