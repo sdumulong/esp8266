@@ -6,11 +6,6 @@
 #include <ESP8266mDNS.h>
 #include <Syslog.h>
 
-#ifdef DEBUG_ESP_PORT
-#define DEBUG_MSG(...) DEBUG_ESP_PORT.printf( __VA_ARGS__ )
-#else
-#define DEBUG_MSG(...)
-#endif
 
 struct struct_config {
 	const char* ssid;
@@ -36,17 +31,21 @@ struct struct_config {
 	const char* certPath;
 };
 
-#define     SERIAL_BAUDRATE	19200
-bool   debug       = true; //Affiche sur la console si True
+#define SERIAL_BAUDRATE	19200
+bool    	debug        = true; //Affiche sur la console si True
 struct struct_config config;
-int serverPort = 80;
+int     	serverPort   = 80;
+int     	pirPin       = D7;
+int     	microSwitch  = D8;
 
-const char* APssid   = "BedlightV3";
-IPAddress ip;
+boolean 	Motion 		= 0;
+boolean 	LastMotion 	= 0;
+const char* APssid   	= "BedlightV3";
+IPAddress 	ip;
 
-IPAddress local_IP(192,168,4,3);
-IPAddress gateway(192,168,4,255);
-IPAddress subnet(255,255,255,0);
+IPAddress 	local_IP(192,168,4,3);
+IPAddress 	gateway(192,168,4,255);
+IPAddress 	subnet(255,255,255,0);
 ESP8266WebServer server(serverPort); //Server on port
 
 char    message_buff[100];
@@ -68,8 +67,10 @@ MDNSResponder mdns;
 void setup() {
 	Serial.begin(SERIAL_BAUDRATE);   //Facultatif pour le debug
 	delay(10);
+
+	pinMode(microSwitch, INPUT);
+	pinMode(pirPin, INPUT);
 	Serial.println('\n');
-    DEBUG_MSG("bootup...\n");
 
 	SPIFFS.begin();
 	if (!SPIFFS.exists("/config.json")) {
@@ -280,7 +281,7 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
   ip = WiFi.localIP();
   if(mdns.begin(config.deviceID),WiFi.localIP())
-	  Serial.println("\nmDNS Responder Started on " + String(config.deviceID));
+	  Serial.println("\nmDNS Responder Started on http://" + String(config.deviceID));
 }
 
 
@@ -474,6 +475,8 @@ void loop() {
 			if (!client.connected()) { reconnect(); }
 		    client.loop();
 		}
+		monitorResetSwitch();
+		PublishMotionSensor();
 		unsigned long now = millis();
 		if (now - lastMsg > (1000 * 30)) {
 			lastMsg = now;
@@ -484,25 +487,72 @@ void loop() {
 
 
 
+
+//****************************************************************************
+// Reset switch control
+//****************************************************************************
+void monitorResetSwitch() {
+void(* resetFunc) (void) = 0; //declare reset function @ address 0
+int buttonStatus = 0;
+int buttonPressed = 0;
+
+buttonStatus = digitalRead(microSwitch);
+
+delay(100);
+	while (buttonStatus) {
+		buttonPressed ++;
+		delay(100);
+		buttonStatus = digitalRead(microSwitch);
+	}
+    if (buttonPressed > 0 && buttonPressed <= 20) {
+	    Serial.println("Button Pressed less than 20");
+    	resetFunc();
+    }
+    if (buttonPressed > 20) {
+	    Serial.println("Button Pressed more than 20");
+    	SPIFFS.begin();
+  	    SPIFFS.remove("/config.json");
+    	resetFunc();
+    }
+}
+
+
+
+//****************************************************************************
+// Publish Motion Sensor
+//****************************************************************************
+void PublishMotionSensor() {
+String jsonMotionStatus;
+String topic =  String(config.deviceID) + "/Motion";
+
+  Motion = digitalRead(pirPin);
+  if (Motion != LastMotion) {
+    if (Motion == HIGH) {
+		StaticJsonDocument<64> doc;
+		doc["Motion"]     = 0;
+		doc["MotionDesc"] = "Motion detected";
+		serializeJson(doc, jsonMotionStatus);
+		client.publish(topic.c_str(), jsonMotionStatus.c_str());
+    }
+    LastMotion = Motion;
+  }
+}
+
+
 //****************************************************************************
 // Publishing Light Status
 //****************************************************************************
 void PublishLightStatus() {
-String topic =  "StartrekLight/Light";
-String strStatus = "Off";
-String strState  = "0";
-String strColor  = "";
+String jsonLightStatus;
+String topic = String(config.deviceID)  + "/Light";
 
-	if (strColor != "#000000") {
-		strStatus = "On";
-		strState = "1";
-	}
-	String strStatus2 = "{\n\"Status\" : \""  + strStatus +
-                        "\",\n\"State\" : \"" + strState  +
-                        "\",\n\"Color\" : \"" + strColor  +
-                        "\"\n} " ;
-
-	client.publish(config.deviceID, (char*) strStatus2.c_str());
+	StaticJsonDocument<64> doc;
+	doc["Status"] = "Off";
+	doc["State"]  = 0;
+	doc["Color"]  = "#FF00FF00";
+	serializeJson(doc, jsonLightStatus);
+	client.publish(topic.c_str(), jsonLightStatus.c_str());
+	Serial.println(jsonLightStatus.c_str());
 }
 
 
@@ -516,7 +566,7 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
 
  if (debug) { Serial.println("Topic recu => " + topic + " Payload: " + payload); }
 
- if (topic == subscribe_topics[0]) { DisplayStatus(); }
+ if (topic == subscribe_topics[0]) { DisplayConfig(); }
  if (topic == subscribe_topics[1]) {
      SPIFFS.begin();
      SPIFFS.remove("/config.json");
@@ -532,7 +582,7 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
 //********************************************************************************
 // Display controler status
 //********************************************************************************
-void DisplayStatus() {
+void DisplayConfig() {
 String jsonStatus;
 
 	jsonStatus = CreateJsonStatus();
