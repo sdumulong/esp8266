@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 #include <ESP8266mDNS.h>
 #include <Syslog.h>
+#include <ESP8266SSDP.h>
 
 
 struct struct_config {
@@ -54,11 +55,12 @@ String  subscribe_topics[10];
 bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
 unsigned long lastMsg   = 0;    //Horodatage du dernier message publié sur MQTT
-String  activeColor = "#000000";  //Light Value
+String  activeColor = "#00000000";  //Light Value
 
 WiFiClient    espClient;  // @suppress("Abstract class cannot be instantiated")
 PubSubClient  client(espClient);
 MDNSResponder mdns;
+//UPnPDevice device;
 
 
 //===================================================================================
@@ -253,7 +255,6 @@ void startAccessPoint() {
 	  server.on("/", handleRoot);      //Which routine to handle at root location
 	  server.on("/save", handlePost);
 	  server.begin();                  //Start server
-
 	  Serial.println("HTTP server started");
 }
 
@@ -328,6 +329,24 @@ void setup_syslog() {
 // Configuration de la connexion UPnP
 //********************************************************************************
 void setup_upnp() {
+	  server.on("/description.xml", HTTP_GET, []() {
+		SSDP.schema(server.client());
+  	  });
+	  Serial.print("Starting SSDP...");
+	  SSDP.setSchemaURL("description.xml");
+	  SSDP.setHTTPPort(80);
+	  SSDP.setName("Bedlight V3");
+	  SSDP.setSerialNumber("0000000000001");
+	  SSDP.setURL("index.html");
+	  SSDP.setModelName("ESP82766 Light controler");
+	  SSDP.setModelNumber("929000226503");
+	  SSDP.setModelURL("http://Bedlight");
+	  SSDP.setManufacturer("SDLogik informatique inc.");
+	  SSDP.setManufacturerURL("http://sdlogik.com");
+	  SSDP.begin();
+	  Serial.println("OK");
+
+//	  UPnP.begin(&server, &device);
 }
 
 
@@ -335,15 +354,16 @@ void setup_upnp() {
 // Configuration de la connexion API
 //********************************************************************************
 void setup_api() {
-    Serial.println("\nStarting API service.");
+    Serial.print("Starting API service...");
 	server.on("/"       , handleRootDevice);
 	server.on("/Config" , handleConfig);
 	server.on("/Reset"  , handleReset);
 	server.on("/State"  , handleState);
 	server.on("/Color"  , handleColor);
 	server.on("/Restart", handleRestart);
+
 	server.begin(); //Start API server
-	Serial.println("API server started\n");
+	Serial.println("OK\n");
 	MDNS.addService("http", "tcp", serverPort);
 }
 
@@ -547,9 +567,14 @@ String jsonLightStatus;
 String topic = String(config.deviceID)  + "/Light";
 
 	StaticJsonDocument<64> doc;
-	doc["Status"] = "Off";
-	doc["State"]  = 0;
-	doc["Color"]  = "#FF00FF00";
+	if (activeColor == "#00000000") {
+		doc["Status"] = "Off";
+		doc["State"]  = 0;
+	} else {
+		doc["Status"] = "On";
+		doc["State"]  = 1;
+	}
+	doc["Color"]  = activeColor;
 	serializeJson(doc, jsonLightStatus);
 	client.publish(topic.c_str(), jsonLightStatus.c_str());
 	Serial.println(jsonLightStatus.c_str());
@@ -584,8 +609,9 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
 //********************************************************************************
 void DisplayConfig() {
 String jsonStatus;
-
 	jsonStatus = CreateJsonStatus();
+	Serial.println(config.deviceID);
+	Serial.println(jsonStatus);
 	client.publish(config.deviceID,jsonStatus.c_str());
 }
 
@@ -637,15 +663,13 @@ String jsonStatus;
 //********************************************************************************
 void SetState(String payload) {
   if (payload == "On") {
-// ReadSetupValues();
-// colorRGB(activeColor);
-// PublishLightStatus();
-     return;
+	  colorRGB(ReadSavedColor());
+	  PublishLightStatus();
+      return;
   }
   if (payload == "Off") {
-//   activeColor = "#00000000";
-// colorRGB(activeColor);
-// PublishLightStatus();
+     colorRGB("#00000000");
+     PublishLightStatus();
      return;
   }
 }
@@ -655,15 +679,56 @@ void SetState(String payload) {
 // Set Color of Light in Hexa format #FFFFFFFF (4 colors)
 //********************************************************************************
 void SetColor(String payload) {
-	Serial.print(payload);
 	if (payload.substring(0,1) == "#") {
 		activeColor = payload;
-//		SaveSetupValues(activeColor);
+		SaveColorValue(activeColor);
 	  	colorRGB(activeColor);
-//	  	PublishLightStatus();
-	  	Serial.println("New Color " + activeColor );
+ 	  	PublishLightStatus();
+	  	//Serial.println("New Color " + activeColor );
 	  	return;
 	}
+}
+
+
+
+//********************************************************************************
+// Read saved color
+//********************************************************************************
+String ReadSavedColor() {
+const char* color = "";
+
+	 if (SPIFFS.exists("/savedcolor.json")) {
+		  File file = SPIFFS.open("/savedcolor.json", "r"); // @suppress("Abstract class cannot be instantiated")
+		  while(file.available()) {
+		    String line = file.readStringUntil('\n');
+			StaticJsonDocument<64> doc;
+			deserializeJson(doc, line);
+			color = doc["color"];
+			file.close();
+			Serial.println(color);
+		    return String(color);
+		  }
+	 } else {
+		 return "#FFFFFFFF";
+	 }
+}
+
+
+
+//********************************************************************************
+// Saved color Value
+//********************************************************************************
+void SaveColorValue(String color) {
+String jsonStatus;
+	StaticJsonDocument<64> doc;
+	doc["color"] = color;
+	serializeJson(doc, jsonStatus);
+	File file = SPIFFS.open("/savedcolor.json", "w"); // @suppress("Abstract class cannot be instantiated")
+	file.print(jsonStatus);
+	Serial.print("Saving color :");
+	Serial.println(jsonStatus);
+//  int bytesWritten = file.print(deviceJson);
+	file.close();
 }
 
 
@@ -674,8 +739,9 @@ void SetColor(String payload) {
 //****************************************************************************
 void colorRGB(String HexValue){
 
-  Serial.print("colorRGB ");
-  Serial.println(HexValue);
+  activeColor = HexValue;
+//  Serial.print("colorRGB ");
+//  Serial.println(HexValue);
 
   unsigned long number = (unsigned long) strtoul( &HexValue[1], NULL, 16);
 
@@ -687,7 +753,7 @@ void colorRGB(String HexValue){
   analogWrite(D1,subStringR);
   analogWrite(D2,subStringG);
   analogWrite(D3,subStringB);
-//analogWrite(D4,constrain(subStringW,0,255));
+//analogWrite(D4,subStringW,0,255));
 }
 
 

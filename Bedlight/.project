@@ -47,6 +47,11 @@
 			<location>//NAS/home/Documents/Arduino/libraries/ArduinoJson-6.x</location>
 		</link>
 		<link>
+			<name>libraries/ESP8266SSDP</name>
+			<type>2</type>
+			<locationURI>ECLIPSE_HOME/arduinoPlugin/packages/esp8266/hardware/esp8266/2.3.0/libraries/ESP8266SSDP</locationURI>
+		</link>
+		<link>
 			<name>libraries/ESP8266WebServer</name>
 			<type>2</type>
 			<locationURI>ECLIPSE_HOME/arduinoPlugin/packages/esp8266/hardware/esp8266/2.3.0/libraries/ESP8266WebServer</locationURI>
