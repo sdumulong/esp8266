@@ -335,8 +335,8 @@ void setup_upnp() {
 	  Serial.print("Starting SSDP...");
 	  SSDP.setSchemaURL("description.xml");
 	  SSDP.setHTTPPort(80);
-	  SSDP.setName("Bedlight V3");
-	  SSDP.setSerialNumber("0000000000001");
+	  SSDP.setName(String(config.deviceID));
+	  SSDP.setSerialNumber(ESP.getChipId());
 	  SSDP.setURL("index.html");
 	  SSDP.setModelName("ESP82766 Light controler");
 	  SSDP.setModelNumber("929000226503");
@@ -705,7 +705,6 @@ const char* color = "";
 			deserializeJson(doc, line);
 			color = doc["color"];
 			file.close();
-			Serial.println(color);
 		    return String(color);
 		  }
 	 } else {
