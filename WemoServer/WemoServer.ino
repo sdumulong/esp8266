@@ -52,7 +52,7 @@ void loop() {
   }
   Serial.println();
   wemo_control(wemo_status);
-  delay(5000);
+  delay(10000);
 }
 
 void wemo_control(int cmd) {
@@ -90,6 +90,7 @@ void wemo_control(int cmd) {
   }
   delay(10);
 
+  Serial.println("Response___________");
   // Read all the lines of the reply from server and print them to Serial
   while(client.available()){
     String line = client.readStringUntil('\r');

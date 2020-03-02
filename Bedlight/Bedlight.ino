@@ -5,7 +5,6 @@
 #include <ArduinoJson.h>
 #include <ESP8266mDNS.h>
 #include <Syslog.h>
-#include <ESP8266SSDP.h>
 
 
 struct struct_config {
@@ -425,7 +424,6 @@ String value = "";
 	Serial.println("Color request");
 	value = server.arg("value");
     server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Color set to " + value + "</body></html>" );
-
 }
 
 
@@ -433,11 +431,12 @@ String value = "";
 //
 //********************************************************************************
 void handleRestart() {
-void(* resetFunc) (void) = 0; //declare reset function @ address 0
+//void(* resetFunc) (void) = 0; //declare reset function @ address 0
 
 	Serial.println("Restart request");
     server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Restarting Bedlight</body></html>" );
-    resetFunc();
+    //resetFunc();
+    ESP.restart();
 }
 
 
@@ -512,7 +511,7 @@ void loop() {
 // Reset switch control
 //****************************************************************************
 void monitorResetSwitch() {
-void(* resetFunc) (void) = 0; //declare reset function @ address 0
+//void(* resetFunc) (void) = 0; //declare reset function @ address 0
 int buttonStatus = 0;
 int buttonPressed = 0;
 
@@ -526,13 +525,15 @@ delay(100);
 	}
     if (buttonPressed > 0 && buttonPressed <= 20) {
 	    Serial.println("Button Pressed less than 20");
-    	resetFunc();
+	    ESP.restart();
+    	//resetFunc();
     }
     if (buttonPressed > 20) {
 	    Serial.println("Button Pressed more than 20");
     	SPIFFS.begin();
   	    SPIFFS.remove("/config.json");
-    	resetFunc();
+    	//resetFunc();
+  	    ESP.restart();
     }
 }
 
