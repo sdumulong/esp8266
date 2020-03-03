@@ -98,6 +98,7 @@ void setup() {
 		setup_wifi();
 		if (config.mqtt)   {setup_mqtt();  }
 		if (config.api)    {setup_api();   }
+		Wemo_Subscribing();
 	}
 }
 
@@ -321,6 +322,7 @@ void setup_api() {
 	server.on("/api/restart", handleRestart);
 	server.on("/api/setbinarystate", handleBinaryState);
 	server.on("/api/getbinarystate", handleGetBinaryState);
+	server.on("/wemoSubscriptions", handleSubscriptions);
 
 	server.begin(); //Start API server
 	Serial.println("OK");
@@ -331,9 +333,49 @@ void setup_api() {
     Serial.println("   /api/restart");
     Serial.println("   /api/setbinarystate");
     Serial.println("   /api/getbinarystate\n");
+    Serial.println("   /wemoSubscriptions\n");
 	MDNS.addService("http", "tcp", serverPort);
 }
 
+
+
+
+//********************************************************************************
+// Configuration de la connexion API
+//********************************************************************************
+void Wemo_Subscribing() {
+
+	WiFiClient Wemoclient;
+
+	Serial.println("Initializing wemo subscriptions");
+	for (int i = 0; i <= 2; i++) {
+		Serial.print("    Connecting to Wemo at ");
+		Serial.println(devices[i].deviceIP);
+		if (!Wemoclient.connect(devices[i].deviceIP, devices[i].devicePort)) {
+		    Serial.println("Connection failed");
+		    return;
+		}
+		Wemoclient.println("SUBSCRIBE /upnp/event/basicevent1 HTTP/1.0");
+		Wemoclient.println("Content-Length: 0");
+		Wemoclient.println("HOST: " + String(devices[i].deviceIP));
+		Wemoclient.println("CALLBACK: <http://192.168.0.83:80/wemoSubscriptions>");
+		Wemoclient.println("NT: upnp:event");
+		Wemoclient.println("TIMEOUT: infinite");
+		Wemoclient.println("Connection: close");
+		delay(100);
+	}
+	Serial.println();
+}
+
+
+
+//********************************************************************************
+//
+//********************************************************************************
+void handleSubscriptions() {
+    Serial.println("Receive Subscriptions");
+    server.send(200, "<! DOCTYPE json>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>OK</body></html>" );
+}
 
 
 //********************************************************************************
@@ -433,7 +475,8 @@ void reconnect() { //Boucle jusqu'à obtenur une reconnexion
       mqtt_status = "Connected";
       for (int i=0; i<nb_subscribe_topics; i++) {
         client.subscribe(subscribe_topics[i].c_str());
-        if (debug) { Serial.println("Subscribing to topic: " + subscribe_topics[i]); }
+        if (debug) { Serial.println("    Subscribing to topic: " + subscribe_topics[i]); }
+        delay(10);
       }
       Serial.println("");
     } else {
@@ -650,9 +693,9 @@ String jsonStatus;
 String wemo_getState(const char* IP, int port) {
 int     pos = 0;
 int     pos1 = 0;
-int     pos2 = 0;
 String  binaryState = "";
 String  brightness  = "";
+String  returnValue = "";
 
   Serial.print("Connecting to Wemo at ");
   Serial.println(IP);
@@ -681,19 +724,21 @@ String  brightness  = "";
 //    Serial.print(line);
     pos = line.indexOf("</BinaryState>");
     if (pos > 0) binaryState = line.substring(pos-1, pos);
-
     pos1 = line.indexOf("</brightness>");
-    if (pos1 > 0) brightness = line.substring(pos1-2, pos1);
+    if (pos1 > 0) brightness = line.substring(13, pos1);
+//    Serial.print(pos1);
   }
-  Serial.println();
-  Serial.print("State:");
-  Serial.println(binaryState);
-  Serial.print("Brightness:");
-  Serial.println(brightness);
+//  Serial.println();
+//  Serial.print("State:");
+//  Serial.println(binaryState);
+//  Serial.print("Brightness:");
+//  Serial.println(brightness);
 
   Serial.println("Closing connection");
   Wemoclient.flush();
-  return binaryState;  // TODO retourner une structure
+  if (brightness != "") returnValue = "{\"binaryState\"=" + binaryState + ";\"brightness\"=" + brightness + "}";
+  if (brightness == "") returnValue = "{\"binaryState\"=" + binaryState +  "}";
+  return returnValue;
 }
 
 
