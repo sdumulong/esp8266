@@ -83,7 +83,6 @@ void setup() {
 		if (config.ssl)    {setup_ssl();   }
 		if (config.mqtt)   {setup_mqtt();  }
 		if (config.syslog) {setup_syslog();}
-		if (config.upnp)   {setup_upnp();  }
 		if (config.api)    {setup_api();   }
 	}
 }
@@ -248,11 +247,11 @@ void startAccessPoint() {
 	  Serial.print("Soft-AP IP address = ");
 	  Serial.println(WiFi.softAPIP());
 
-	  WiFi.mode(WIFI_AP_STA);         //Both Access point and Wifi client are enabled
-	  WiFi.softAP(APssid);  //Start HOTspot removing password will disable security
+	  WiFi.mode(WIFI_AP_STA);          //Both Access point and Wifi client are enabled
+	  WiFi.softAP(APssid);             //Start HOTspot removing password will disable security
 
-	  server.on("/", handleRoot);      //Which routine to handle at root location
-	  server.on("/save", handlePost);
+	  server.on("/", handleRoot);      // @suppress("Ambiguous problem")
+	  server.on("/save", handlePost);  // @suppress("Ambiguous problem")
 	  server.begin();                  //Start server
 	  Serial.println("HTTP server started");
 }
@@ -324,42 +323,18 @@ void setup_syslog() {
 }
 
 
-//********************************************************************************
-// Configuration de la connexion UPnP
-//********************************************************************************
-void setup_upnp() {
-	  server.on("/description.xml", HTTP_GET, []() {
-		SSDP.schema(server.client());
-  	  });
-	  Serial.print("Starting SSDP...");
-	  SSDP.setSchemaURL("description.xml");
-	  SSDP.setHTTPPort(80);
-	  SSDP.setName(String(config.deviceID));
-	  SSDP.setSerialNumber(ESP.getChipId());
-	  SSDP.setURL("index.html");
-	  SSDP.setModelName("ESP82766 Light controler");
-	  SSDP.setModelNumber("929000226503");
-	  SSDP.setModelURL("http://Bedlight");
-	  SSDP.setManufacturer("SDLogik informatique inc.");
-	  SSDP.setManufacturerURL("http://sdlogik.com");
-	  SSDP.begin();
-	  Serial.println("OK");
-
-//	  UPnP.begin(&server, &device);
-}
-
 
 //********************************************************************************
 // Configuration de la connexion API
 //********************************************************************************
 void setup_api() {
     Serial.print("Starting API service...");
-	server.on("/"       , handleRootDevice);
-	server.on("/Config" , handleConfig);
-	server.on("/Reset"  , handleReset);
-	server.on("/State"  , handleState);
-	server.on("/Color"  , handleColor);
-	server.on("/Restart", handleRestart);
+	server.on("/"       , handleRootDevice); // @suppress("Ambiguous problem")
+	server.on("/Config" , handleConfig); // @suppress("Ambiguous problem")
+	server.on("/Reset"  , handleReset); // @suppress("Ambiguous problem")
+	server.on("/State"  , handleState); // @suppress("Ambiguous problem")
+	server.on("/Color"  , handleColor); // @suppress("Ambiguous problem")
+	server.on("/Restart", handleRestart); // @suppress("Ambiguous problem")
 
 	server.begin(); //Start API server
 	Serial.println("OK\n");
