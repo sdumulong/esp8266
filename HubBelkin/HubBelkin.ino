@@ -35,6 +35,12 @@ struct device_def {
 	int         devicePort;
 };
 
+struct device_state {
+	String      state;
+	String      brightness;
+};
+
+
 #define SERIAL_BAUDRATE	19200
 bool    	debug        = true; //Affiche sur la console si True
 struct struct_config config;
@@ -516,13 +522,19 @@ void loop() {
 // Publishing Light Status
 //****************************************************************************
 void PublishLightStatus() {
-String      state       = "";
+String  values;
 
 	for (int i = 0; i <= 2; i++) {
 		Serial.println(devices[i].deviceIP);
-		state = wemo_getState(devices[i].deviceIP, devices[i].devicePort);
-		String pub_topic =  FriendlyName + "/Wemo/BinaryState/" + devices[i].frendlyName;
-		client.publish(pub_topic.c_str(), state.c_str());
+		values = wemo_getState(devices[i].deviceIP, devices[i].devicePort);
+
+		String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + devices[i].frendlyName;
+		String pub_topicBright =  FriendlyName + "/Wemo/Brightness/" + devices[i].frendlyName;
+		Serial.print("Publishing status of ");
+		Serial.println(pub_topicState);
+		client.publish(pub_topicState.c_str(), values.c_str());
+//		if (values.brightness != "x")
+//			client.publish(pub_topicBright.c_str(), values.brightness.c_str());
 	}
 }
 
@@ -580,10 +592,11 @@ String jsonStatus;
 // Get Binary State
 //********************************************************************************
 void GetBinaryState(String topic) {
-String      device      = "";
-const char* deviceIP    = "";
-int         devicePort  = 0;
-String      state       = "";
+String      	device      = "";
+const char* 	deviceIP    = "";
+int         	devicePort  = 0;
+device_state  	values;
+String 			returnValue = "";
 
 
 	device = topic.substring(30);
@@ -594,11 +607,13 @@ String      state       = "";
 			break;
 		}
 	}
-	state = wemo_getState(deviceIP, devicePort);
-	String pub_topic =  FriendlyName + "/Wemo/BinaryState/" + device;
-//	Serial.println(pub_topic);
+	returnValue = wemo_getState(deviceIP, devicePort);
+	String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + device;
+//	String pub_topicBright =  FriendlyName + "/Wemo/Brightness/" + device;
 
-	client.publish(pub_topic.c_str(), state.c_str());
+	client.publish(pub_topicState.c_str(), returnValue.c_str());
+//	if (values.brightness != "x")
+//		client.publish(pub_topicBright.c_str(), values.brightness.c_str());
 }
 
 
@@ -620,6 +635,10 @@ void SetBinaryState(String topic, String payload) {
 				break;
 			}
 		}
+	String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + device;
+	Serial.print("Publishing status of ");
+	Serial.println(pub_topicState);
+	client.publish(pub_topicState.c_str(), payload.c_str());
 	wemo_control(deviceIP, devicePort, payload.toInt());
 }
 
@@ -691,11 +710,10 @@ String jsonStatus;
 // Wemo Get State
 //********************************************************************************
 String wemo_getState(const char* IP, int port) {
-int     pos = 0;
-int     pos1 = 0;
-String  binaryState = "";
-String  brightness  = "";
-String  returnValue = "";
+int     		pos = 0;
+int     		pos1 = 0;
+String  		binaryState = "";
+String  		brightness  = "";
 
   Serial.print("Connecting to Wemo at ");
   Serial.println(IP);
@@ -721,24 +739,23 @@ String  returnValue = "";
 
   while(Wemoclient.available()){
     String line = Wemoclient.readStringUntil('\r');
-//    Serial.print(line);
     pos = line.indexOf("</BinaryState>");
     if (pos > 0) binaryState = line.substring(pos-1, pos);
     pos1 = line.indexOf("</brightness>");
     if (pos1 > 0) brightness = line.substring(13, pos1);
-//    Serial.print(pos1);
   }
-//  Serial.println();
-//  Serial.print("State:");
-//  Serial.println(binaryState);
-//  Serial.print("Brightness:");
-//  Serial.println(brightness);
 
   Serial.println("Closing connection");
   Wemoclient.flush();
-  if (brightness != "") returnValue = "{\"binaryState\"=" + binaryState + ";\"brightness\"=" + brightness + "}";
-  if (brightness == "") returnValue = "{\"binaryState\"=" + binaryState +  "}";
-  return returnValue;
+  return binaryState;
+//  if (brightness != "") {
+//	  values.state = binaryState;
+//  	  values.brightness = brightness;}
+
+//  if (brightness == "") {
+//	  values.state = binaryState;
+//  	  values.brightness = "x";}
+
 }
 
 
