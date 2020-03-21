@@ -66,9 +66,6 @@ void setup() {
 	Serial.begin(SERIAL_BAUDRATE);   //Facultatif pour le debug
 	delay(10);
 
-//	SPIFFS.begin();
-//	SPIFFS.remove("/config.json");
-
 	pinMode(microSwitch, INPUT);
 	Serial.println('\n');
 
@@ -110,7 +107,6 @@ void parseConfigJson(String document)  {
 
 	StaticJsonDocument<1152> doc;
 	deserializeJson(doc, document);
-//    Serial.print(document);
 	config.ssid         = doc["ssid"];
 	config.pwd          = doc["pwd"];
 	config.deviceID     = doc["deviceID"];
@@ -387,9 +383,9 @@ std::size_t i;
 void reconnect() { //Boucle jusqu'à obtenur une reconnexion
 
   while (!client.connected()) {
-    Serial.print("MQTT Connecxion...");
+	Serial.print("MQTT Connecxion of " + String(config.deviceID) + "...");
 
-    if (client.connect(config.ssid)) {
+    if (client.connect(config.deviceID)) {
       Serial.println("OK");
       mqtt_status = "Connected";
       for (int i=0; i<nb_subscribe_topics; i++) {

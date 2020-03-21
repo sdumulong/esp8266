@@ -436,9 +436,9 @@ std::size_t i;
 void reconnect() { //Boucle jusqu'à obtenur une reconnexion
 
   while (!client.connected()) {
-    Serial.print("MQTT Connecxion...");
+    Serial.print("MQTT Connecxion of " + String(config.deviceID) + "...");
 
-    if (client.connect(config.ssid)) {
+    if (client.connect(config.deviceID)) {
       Serial.println("OK");
       mqtt_status = "Connected";
       for (int i=0; i<nb_subscribe_topics; i++) {

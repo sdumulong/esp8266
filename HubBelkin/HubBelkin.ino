@@ -474,9 +474,10 @@ std::size_t i;
 void reconnect() { //Boucle jusqu'à obtenur une reconnexion
 
   while (!client.connected()) {
-    Serial.print("MQTT Connecxion...");
+    Serial.print("MQTT Connecxion of " + String(config.deviceID) + "...");
 
-    if (client.connect(config.ssid)) {
+   if (client.connect(config.deviceID)) {
+//    if (client.connect("HubBelkin")) {
       Serial.println("OK");
       mqtt_status = "Connected";
       for (int i=0; i<nb_subscribe_topics; i++) {
@@ -525,7 +526,7 @@ void PublishLightStatus() {
 String  values;
 
 	for (int i = 0; i <= 2; i++) {
-		Serial.println(devices[i].deviceIP);
+		// Serial.println(devices[i].deviceIP);
 		values = wemo_getState(devices[i].deviceIP, devices[i].devicePort);
 
 		String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + devices[i].frendlyName;
@@ -715,8 +716,8 @@ int     		pos1 = 0;
 String  		binaryState = "";
 String  		brightness  = "";
 
-  Serial.print("Connecting to Wemo at ");
-  Serial.println(IP);
+//  Serial.print("Connecting to Wemo at ");
+//  Serial.println(IP);
 
   // Use WiFiClient class to create TCP connections
   WiFiClient Wemoclient;
@@ -745,7 +746,7 @@ String  		brightness  = "";
     if (pos1 > 0) brightness = line.substring(13, pos1);
   }
 
-  Serial.println("Closing connection");
+//  Serial.println("Closing connection");
   Wemoclient.flush();
   return binaryState;
 //  if (brightness != "") {
