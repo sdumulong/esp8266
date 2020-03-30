@@ -45,6 +45,7 @@ struct device_state {
 bool    	debug        = true; //Affiche sur la console si True
 struct struct_config config;
 struct device_def    devices[20];
+struct device_state  deviceState;
 
 int     	serverPort   = 80;
 String      FriendlyName= "";
@@ -329,6 +330,8 @@ void setup_api() {
 	server.on("/api/setbinarystate", handleBinaryState);
 	server.on("/api/getbinarystate", handleGetBinaryState);
 	server.on("/wemoSubscriptions", handleSubscriptions);
+	server.on("/devicemanager", handleDeviceManager);
+	server.on("/adddevice", handleAddDevice);
 
 	server.begin(); //Start API server
 	Serial.println("OK");
@@ -361,17 +364,70 @@ void Wemo_Subscribing() {
 		    Serial.println("Connection failed");
 		    return;
 		}
-		Wemoclient.println("SUBSCRIBE /upnp/event/basicevent1 HTTP/1.0");
+		Wemoclient.println("\"SUBSCRIBE /upnp/event/basicevent1 HTTP/1.0");
 		Wemoclient.println("Content-Length: 0");
 		Wemoclient.println("HOST: " + String(devices[i].deviceIP));
-		Wemoclient.println("CALLBACK: <http://192.168.0.83:80/wemoSubscriptions>");
+		Wemoclient.println("CALLBACK: <http://192.168.0.83/wemoSubscriptions>");
 		Wemoclient.println("NT: upnp:event");
 		Wemoclient.println("TIMEOUT: infinite");
-		Wemoclient.println("Connection: close");
+		Wemoclient.println("Connection: close\"");
 		delay(100);
 	}
 	Serial.println();
 }
+
+
+
+//********************************************************************************
+//
+//********************************************************************************
+void handleDeviceManager() {
+String htmlPage = "";
+String device = "<tr><td width=\"100\">Lustre</td><td width=\"100\">Switch</td><td width=\"134\">192.168.0.154</td><td width=\"67\">15874</td><td width=\"28\" align=\"right\"><a href=\"/delete?device=Lustre\">del</a></td></tr>";
+    Serial.println("Request for Device Manager");
+
+
+    bool fsMounted = SPIFFS.begin();
+
+    	if (fsMounted ) {
+    		Serial.println("File system mounted with success");
+    	} else {
+    		Serial.println("Error mounting the file system");
+    		return;
+    	}
+    	if (SPIFFS.exists("/devices.html")) {
+    		File file = SPIFFS.open("/devices.html", "r"); // @suppress("Abstract class cannot be instantiated")
+    		if (!file) { Serial.println("Error opening file"); }
+    		Serial.println("\nReading device manager page");
+    		  while(file.available()) {
+    		  	htmlPage = htmlPage + file.readStringUntil('\n');
+    		  }
+    		htmlPage.replace(">><<",device);
+    	    server.send(200, "<! DOCTYPE html>", htmlPage.c_str());
+    	}
+}
+
+
+
+//********************************************************************************
+//
+//********************************************************************************
+void handleAddDevice() {
+	String jsonConfig;
+
+	   Serial.println("Reception of Data");
+
+	   StaticJsonDocument<512> doc;
+	   doc["frendlyName"] 	= server.arg("name");
+	   doc["deviceType"] 	= server.arg("type");
+	   doc["deviceIp"] 		= server.arg("IP");
+	   doc["devicePort"] 	= server.arg("Port");
+
+	   serializeJson(doc, jsonConfig);
+	   Serial.println(jsonConfig);
+	   handleDeviceManager();
+}
+
 
 
 
@@ -533,7 +589,12 @@ String  values;
 		String pub_topicBright =  FriendlyName + "/Wemo/Brightness/" + devices[i].frendlyName;
 		Serial.print("Publishing status of ");
 		Serial.println(pub_topicState);
-		client.publish(pub_topicState.c_str(), values.c_str());
+
+		client.publish(pub_topicState.c_str(),  deviceState.state.c_str());
+	  	if (deviceState.brightness != "x")
+	  		client.publish(pub_topicBright.c_str(), deviceState.brightness.c_str());
+
+//		client.publish(pub_topicState.c_str(), values.c_str());
 //		if (values.brightness != "x")
 //			client.publish(pub_topicBright.c_str(), values.brightness.c_str());
 	}
@@ -610,11 +671,11 @@ String 			returnValue = "";
 	}
 	returnValue = wemo_getState(deviceIP, devicePort);
 	String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + device;
-//	String pub_topicBright =  FriendlyName + "/Wemo/Brightness/" + device;
+ 	String pub_topicBright =  FriendlyName + "/Wemo/Brightness/" + device;
 
-	client.publish(pub_topicState.c_str(), returnValue.c_str());
-//	if (values.brightness != "x")
-//		client.publish(pub_topicBright.c_str(), values.brightness.c_str());
+	client.publish(pub_topicState.c_str(),  deviceState.state.c_str());
+  	if (deviceState.brightness != "x")
+  		client.publish(pub_topicBright.c_str(), deviceState.brightness.c_str());
 }
 
 
@@ -653,7 +714,8 @@ void SetBrightness(String topic, String payload) {
 	const char* deviceIP    = "";
 	int         devicePort  = 0;
 
-	Serial.println("Setting brightness");
+	Serial.print("Setting brightness to ");
+	Serial.println(payload);
 		device = topic.substring(29);
 		for (int i = 0; i <= 20; i++) {
 			if (devices[i].frendlyName == device) {
@@ -662,6 +724,10 @@ void SetBrightness(String topic, String payload) {
 				break;
 			}
 		}
+	String pub_topicState = FriendlyName + "/Wemo/Brightness/" + device;
+	Serial.print("Publishing brightness of ");
+	Serial.println(pub_topicState);
+	client.publish(pub_topicState.c_str(), payload.c_str());
 	wemo_brightness(deviceIP, devicePort, payload.toInt());
 }
 
@@ -745,18 +811,17 @@ String  		brightness  = "";
     pos1 = line.indexOf("</brightness>");
     if (pos1 > 0) brightness = line.substring(13, pos1);
   }
-
-//  Serial.println("Closing connection");
   Wemoclient.flush();
+
+  if (brightness != "") {
+	  deviceState.state = binaryState;
+	  deviceState.brightness = brightness;}
+
+  if (brightness == "") {
+	  deviceState.state = binaryState;
+  	  deviceState.brightness = "0";}
+
   return binaryState;
-//  if (brightness != "") {
-//	  values.state = binaryState;
-//  	  values.brightness = brightness;}
-
-//  if (brightness == "") {
-//	  values.state = binaryState;
-//  	  values.brightness = "x";}
-
 }
 
 
@@ -766,8 +831,8 @@ String  		brightness  = "";
 //********************************************************************************
 void wemo_control(const char* IP, int port, int cmd) {
 
-  Serial.print("Connecting to ");
-  Serial.println(IP);
+//  Serial.print("Connecting to ");
+//  Serial.println(IP);
 
   // Use WiFiClient class to create TCP connections
   WiFiClient Wemoclient;
@@ -818,8 +883,8 @@ void wemo_control(const char* IP, int port, int cmd) {
 //********************************************************************************
 void wemo_brightness(const char* IP, int port, int brightness) {
 String wemo_new_brightness = wemo_brightness_value;
-  Serial.print("Connecting to ");
-  Serial.println(IP);
+//  Serial.print("Connecting to ");
+//  Serial.println(IP);
 
   // Use WiFiClient class to create TCP connections
   WiFiClient Wemoclient;
@@ -843,13 +908,13 @@ String wemo_new_brightness = wemo_brightness_value;
   Wemoclient.println(wemo_new_brightness);
   delay(10);
 
-  Serial.println("____________Response___________");
+//  Serial.println("____________Response___________");
   // Read all the lines of the reply from server and print them to Serial
   while(Wemoclient.available()){
     String line = Wemoclient.readStringUntil('\r');
     Serial.print(line);
   }
 
-  Serial.println();
-  Serial.println("Closing connection");
+//  Serial.println();
+//  Serial.println("Closing connection");
 }
