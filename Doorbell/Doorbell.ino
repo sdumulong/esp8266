@@ -490,7 +490,7 @@ void TraiterMessageRecu(String topic, String payload) {
      SPIFFS.begin();
      SPIFFS.remove("/config.json");
      ESP.restart(); }
- if (topic == subscribe_topics[4]) { ESP.restart();      }
+ if (topic == subscribe_topics[2]) { ESP.restart();      }
 }
 
 
