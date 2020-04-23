@@ -33,6 +33,7 @@ struct device_def {
 	String      frendlyName;
 	const char* deviceIP;
 	int         devicePort;
+	bool        status;
 };
 
 struct device_state {
@@ -42,9 +43,11 @@ struct device_state {
 
 
 #define SERIAL_BAUDRATE	19200
+#define MAX_DEVICE  	20
+
 bool    	debug        = true; //Affiche sur la console si True
 struct struct_config config;
-struct device_def    devices[20];
+struct device_def    devices[MAX_DEVICE];
 struct device_state  deviceState;
 
 int     	serverPort   = 80;
@@ -64,11 +67,9 @@ bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
 unsigned long lastMsg   = 0;    //Horodatage du dernier message publié sur MQTT
 
-WiFiClient    espClient;  // @suppress("Abstract class cannot be instantiated")
+WiFiClient    espClient;        // @suppress("Abstract class cannot be instantiated")
 PubSubClient  client(espClient);
 MDNSResponder mdns;
-// UPnPDevice device;
-
 
 String wemo_on="<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body><u:SetBinaryState xmlns:u=\"urn:Belkin:service:basicevent:1\"><BinaryState>1</BinaryState></u:SetBinaryState></s:Body></s:Envelope>";
 String wemo_off="<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body><u:SetBinaryState xmlns:u=\"urn:Belkin:service:basicevent:1\"><BinaryState>0</BinaryState></u:SetBinaryState></s:Body></s:Envelope>";
@@ -86,14 +87,19 @@ void setup() {
 	devices[0].frendlyName = "Lustre";
 	devices[0].deviceIP    = "192.168.0.15";
 	devices[0].devicePort  = 49153;
+	devices[0].status      = true;
 	devices[1].frendlyName = "Exterieur";
 	devices[1].deviceIP    = "192.168.0.66";
 	devices[1].devicePort  = 49153;
+	devices[1].status      = true;
 	devices[2].frendlyName = "Office";
 	devices[2].deviceIP    = "192.168.0.82";
 	devices[2].devicePort  = 49153;
-
+	devices[2].status      = false;
 	Serial.println('\n');
+
+//	SPIFFS.begin();
+//	SPIFFS.remove("/config.json");
 
 	SPIFFS.begin();
 	if (!SPIFFS.exists("/config.json")) {
@@ -105,7 +111,7 @@ void setup() {
 		setup_wifi();
 		if (config.mqtt)   {setup_mqtt();  }
 		if (config.api)    {setup_api();   }
-		Wemo_Subscribing();
+		// Wemo_Subscribing();
 	}
 }
 
@@ -159,7 +165,7 @@ void parseConfigJson(String document)  {
 	config.ssl    		= strstr( doc["ssl"]   , "ON");
 
 	FriendlyName = String(config.deviceID);
-//	Serial.println(	config.deviceID  );
+
 }
 
 
@@ -265,7 +271,8 @@ void startAccessPoint() {
 
 	  Serial.print("Setting soft-AP ... ");
 	  Serial.println(WiFi.softAP("ESPsoftAP_01") ? "Ready" : "Failed!");
-
+	  Serial.print("Soft-AP SSID : ");
+	  Serial.println(APssid);
 	  Serial.print("Soft-AP IP address = ");
 	  Serial.println(WiFi.softAPIP());
 
@@ -329,7 +336,7 @@ void setup_api() {
 	server.on("/api/restart", handleRestart);
 	server.on("/api/setbinarystate", handleBinaryState);
 	server.on("/api/getbinarystate", handleGetBinaryState);
-	server.on("/wemoSubscriptions", handleSubscriptions);
+//	server.on("/wemoSubscriptions", handleSubscriptions);
 	server.on("/devicemanager", handleDeviceManager);
 	server.on("/adddevice", handleAddDevice);
 
@@ -342,7 +349,7 @@ void setup_api() {
     Serial.println("   /api/restart");
     Serial.println("   /api/setbinarystate");
     Serial.println("   /api/getbinarystate\n");
-    Serial.println("   /wemoSubscriptions\n");
+//    Serial.println("   /wemoSubscriptions\n");
 	MDNS.addService("http", "tcp", serverPort);
 }
 
@@ -354,26 +361,28 @@ void setup_api() {
 //********************************************************************************
 void Wemo_Subscribing() {
 
-	WiFiClient Wemoclient;
+	WiFiClient wemoclient;
 
 	Serial.println("Initializing wemo subscriptions");
 	for (int i = 0; i <= 2; i++) {
 		Serial.print("    Connecting to Wemo at ");
 		Serial.println(devices[i].deviceIP);
-		if (!Wemoclient.connect(devices[i].deviceIP, devices[i].devicePort)) {
+		if (!wemoclient.connect(devices[i].deviceIP, devices[i].devicePort)) {
 		    Serial.println("Connection failed");
 		    return;
 		}
-		Wemoclient.println("\"SUBSCRIBE /upnp/event/basicevent1 HTTP/1.0");
-		Wemoclient.println("Content-Length: 0");
-		Wemoclient.println("HOST: " + String(devices[i].deviceIP));
-		Wemoclient.println("CALLBACK: <http://192.168.0.83/wemoSubscriptions>");
-		Wemoclient.println("NT: upnp:event");
-		Wemoclient.println("TIMEOUT: infinite");
-		Wemoclient.println("Connection: close\"");
+		wemoclient.println("\"SUBSCRIBE /upnp/event/basicevent1 HTTP/1.0");
+		wemoclient.println("Content-Length: 0");
+		wemoclient.println("HOST: " + String(devices[i].deviceIP));
+		wemoclient.println("CALLBACK: <http://192.168.0.83/wemoSubscriptions>");
+		wemoclient.println("NT: upnp:event");
+		wemoclient.println("TIMEOUT: infinite");
+		wemoclient.println("Connection: close\"");
 		delay(100);
 	}
 	Serial.println();
+	wemoclient.stop();
+	wemoclient.flush();
 }
 
 
@@ -581,25 +590,40 @@ void loop() {
 void PublishLightStatus() {
 String  values;
 
-	for (int i = 0; i <= 2; i++) {
-		// Serial.println(devices[i].deviceIP);
-		values = wemo_getState(devices[i].deviceIP, devices[i].devicePort);
-
-		String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + devices[i].frendlyName;
-		String pub_topicBright =  FriendlyName + "/Wemo/Brightness/" + devices[i].frendlyName;
-		Serial.print("Publishing status of ");
-		Serial.println(pub_topicState);
-
-		client.publish(pub_topicState.c_str(),  deviceState.state.c_str());
-	  	if (deviceState.brightness != "x")
-	  		client.publish(pub_topicBright.c_str(), deviceState.brightness.c_str());
-
-//		client.publish(pub_topicState.c_str(), values.c_str());
-//		if (values.brightness != "x")
-//			client.publish(pub_topicBright.c_str(), values.brightness.c_str());
+	for (int i = 0; i < countArray(); i++) {
+		if (devices[i].status) {
+			values = wemo_getState(devices[i].deviceIP, devices[i].devicePort);
+			if (values != "") {
+				String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + devices[i].frendlyName;
+				String pub_topicBright =  FriendlyName + "/Wemo/Brightness/" + devices[i].frendlyName;
+				Serial.print("Publishing status of ");
+				Serial.println(pub_topicState);
+				client.publish(pub_topicState.c_str(),  deviceState.state.c_str());
+				if (deviceState.brightness != "x")
+					client.publish(pub_topicBright.c_str(), deviceState.brightness.c_str());
+			} else {
+				String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + devices[i].frendlyName;
+				client.publish(pub_topicState.c_str(), "Connection failed");
+			}
+		}
 	}
 }
 
+
+
+//********************************************************************************
+// Initialise Subscribed topcCount the number of element in Array
+//********************************************************************************
+int countArray(){
+int devCount = 0;
+
+	for (int i = 0; i < MAX_DEVICE; i++) {
+		if (devices[i].frendlyName != "") {
+			devCount++;
+		}
+	}
+	return devCount;
+}
 
 
 //********************************************************************************
@@ -670,12 +694,17 @@ String 			returnValue = "";
 		}
 	}
 	returnValue = wemo_getState(deviceIP, devicePort);
-	String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + device;
- 	String pub_topicBright =  FriendlyName + "/Wemo/Brightness/" + device;
+	if (returnValue != "") {
+		String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + device;
+		String pub_topicBright =  FriendlyName + "/Wemo/Brightness/" + device;
 
-	client.publish(pub_topicState.c_str(),  deviceState.state.c_str());
-  	if (deviceState.brightness != "x")
-  		client.publish(pub_topicBright.c_str(), deviceState.brightness.c_str());
+		client.publish(pub_topicState.c_str(),  deviceState.state.c_str());
+		if (deviceState.brightness != "x")
+			client.publish(pub_topicBright.c_str(), deviceState.brightness.c_str());
+	} else {
+		String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + device;
+		client.publish(pub_topicState.c_str(),  "Connection failed");
+	}
 }
 
 
@@ -697,11 +726,12 @@ void SetBinaryState(String topic, String payload) {
 				break;
 			}
 		}
+	wemo_control(deviceIP, devicePort, payload.toInt());
 	String pub_topicState  =  FriendlyName + "/Wemo/BinaryState/" + device;
 	Serial.print("Publishing status of ");
 	Serial.println(pub_topicState);
 	client.publish(pub_topicState.c_str(), payload.c_str());
-	wemo_control(deviceIP, devicePort, payload.toInt());
+
 }
 
 
@@ -786,32 +816,39 @@ String  		brightness  = "";
 //  Serial.println(IP);
 
   // Use WiFiClient class to create TCP connections
-  WiFiClient Wemoclient;
+  WiFiClient wemoclient;
 
-  if (!Wemoclient.connect(IP, port)) {
-    Serial.println("Connection failed");
+  if (!wemoclient.connect(IP, port)) {
+    Serial.print("getState Connection failed on ");
+    Serial.print(IP);
+    Serial.print(" Port:");
+    Serial.println(port);
+    wemoclient.stop();
+    wemoclient.flush();
     return "";
   }
-	Wemoclient.println("POST /upnp/control/basicevent1 HTTP/1.1");
-	Wemoclient.println("Host: " + String(IP) + ":" + String(port));
-	Wemoclient.println("User-Agent: ESP8266/1.0");
-	Wemoclient.println("Connection: close");
-	Wemoclient.println("Content-type: text/xml; charset=\"utf-8\"");
-	Wemoclient.print("Content-Length: ");
-	Wemoclient.println(wemo_state.length()); // both wemo_on and wemo_off are the same length, just in case it changes in the future
-	Wemoclient.println("SOAPACTION: \"urn:Belkin:service:basicevent:1#GetBinaryState\"");
-	Wemoclient.println();
-	Wemoclient.println(wemo_state);
+	wemoclient.println("POST /upnp/control/basicevent1 HTTP/1.1");
+	wemoclient.println("Host: " + String(IP) + ":" + String(port));
+	wemoclient.println("User-Agent: ESP8266/1.0");
+	wemoclient.println("Connection: close");
+	wemoclient.println("Content-type: text/xml; charset=\"utf-8\"");
+	wemoclient.print("Content-Length: ");
+	wemoclient.println(wemo_state.length()); // both wemo_on and wemo_off are the same length, just in case it changes in the future
+	wemoclient.println("SOAPACTION: \"urn:Belkin:service:basicevent:1#GetBinaryState\"");
+	wemoclient.println();
+	wemoclient.println(wemo_state);
 	delay(10);
 
-  while(Wemoclient.available()){
-    String line = Wemoclient.readStringUntil('\r');
+  while(wemoclient.available()){
+    String line = wemoclient.readStringUntil('\r');
+    //Serial.println(line);
     pos = line.indexOf("</BinaryState>");
     if (pos > 0) binaryState = line.substring(pos-1, pos);
     pos1 = line.indexOf("</brightness>");
     if (pos1 > 0) brightness = line.substring(13, pos1);
   }
-  Wemoclient.flush();
+  wemoclient.stop();
+  wemoclient.flush();
 
   if (brightness != "") {
 	  deviceState.state = binaryState;
@@ -835,44 +872,51 @@ void wemo_control(const char* IP, int port, int cmd) {
 //  Serial.println(IP);
 
   // Use WiFiClient class to create TCP connections
-  WiFiClient Wemoclient;
+  WiFiClient wemoclient;
 
-  if (!Wemoclient.connect(IP, port)) {
+  Serial.print("Connecting to ");
+  Serial.print(IP);
+  Serial.print(":");
+  Serial.println(port);
+
+  if (!wemoclient.connect(IP, port)) {
     Serial.println("Connection failed");
     return;
   }
 
   // This will send the request to the server
-  Wemoclient.println("POST /upnp/control/basicevent1 HTTP/1.1");
-  Wemoclient.println("Host: " + String(IP) + ":" + String(port));
-  Wemoclient.println("User-Agent: ESP8266/1.0");
-  Wemoclient.println("Connection: close");
-  Wemoclient.println("Content-type: text/xml; charset=\"utf-8\"");
-  Wemoclient.print("Content-Length: ");
+  wemoclient.println("POST /upnp/control/basicevent1 HTTP/1.1");
+  wemoclient.println("Host: " + String(IP) + ":" + String(port));
+  wemoclient.println("User-Agent: ESP8266/1.0");
+  wemoclient.println("Connection: close");
+  wemoclient.println("Content-type: text/xml; charset=\"utf-8\"");
+  wemoclient.print("Content-Length: ");
   if (cmd == 1) {
-	  Wemoclient.println(wemo_on.length()); // both wemo_on and wemo_off are the same length, just in case it changes in the future
+	  wemoclient.println(wemo_on.length()); // both wemo_on and wemo_off are the same length, just in case it changes in the future
   }
   else {
-	  Wemoclient.println(wemo_off.length());
+	  wemoclient.println(wemo_off.length());
   }
-  Wemoclient.println("SOAPACTION: \"urn:Belkin:service:basicevent:1#SetBinaryState\"");
-  Wemoclient.println();
+  wemoclient.println("SOAPACTION: \"urn:Belkin:service:basicevent:1#SetBinaryState\"");
+  wemoclient.println();
   if (cmd == 1) {
-	  Wemoclient.println(wemo_on);
+	  wemoclient.println(wemo_on);
   }
   else {
-	  Wemoclient.println(wemo_off);
+	  wemoclient.println(wemo_off);
   }
   delay(10);
-  Serial.println("Response___________");
+  //Serial.println("Response___________");
   // Read all the lines of the reply from server and print them to Serial
-  while(Wemoclient.available()){
-    String line = Wemoclient.readStringUntil('\r');
-    Serial.print(line);
+  while(wemoclient.available()){
+    String line = wemoclient.readStringUntil('\r');
+    // Serial.print(line);
   }
+  wemoclient.stop();
+  wemoclient.flush();
 
-  Serial.println();
-  Serial.println("Closing connection");
+//  Serial.println();
+//  Serial.println("Closing connection");
 }
 
 
@@ -887,34 +931,35 @@ String wemo_new_brightness = wemo_brightness_value;
 //  Serial.println(IP);
 
   // Use WiFiClient class to create TCP connections
-  WiFiClient Wemoclient;
+  WiFiClient wemoclient;
 
-  if (!Wemoclient.connect(IP, port)) {
+  if (!wemoclient.connect(IP, port)) {
     Serial.println("Connection failed");
     return;
   }
 
   // This will send the request to the server
-  Wemoclient.println("POST /upnp/control/basicevent1 HTTP/1.1");
-  Wemoclient.println("Host: " + String(IP) + ":" + String(port));
-  Wemoclient.println("User-Agent: ESP8266/1.0");
-  Wemoclient.println("Connection: close");
-  Wemoclient.println("Content-type: text/xml; charset=\"utf-8\"");
-  Wemoclient.print("Content-Length: ");
-  Wemoclient.println(wemo_brightness_value.length()); // both wemo_on and wemo_off are the same length, just in case it changes in the future
-  Wemoclient.println("SOAPACTION: \"urn:Belkin:service:basicevent:1#SetBinaryState\"");
-  Wemoclient.println();
+  wemoclient.println("POST /upnp/control/basicevent1 HTTP/1.1");
+  wemoclient.println("Host: " + String(IP) + ":" + String(port));
+  wemoclient.println("User-Agent: ESP8266/1.0");
+  wemoclient.println("Connection: close");
+  wemoclient.println("Content-type: text/xml; charset=\"utf-8\"");
+  wemoclient.print("Content-Length: ");
+  wemoclient.println(wemo_brightness_value.length()); // both wemo_on and wemo_off are the same length, just in case it changes in the future
+  wemoclient.println("SOAPACTION: \"urn:Belkin:service:basicevent:1#SetBinaryState\"");
+  wemoclient.println();
   wemo_new_brightness.replace("~~~",String(brightness));
-  Wemoclient.println(wemo_new_brightness);
+  wemoclient.println(wemo_new_brightness);
   delay(10);
 
 //  Serial.println("____________Response___________");
   // Read all the lines of the reply from server and print them to Serial
-  while(Wemoclient.available()){
-    String line = Wemoclient.readStringUntil('\r');
-    Serial.print(line);
+  while(wemoclient.available()){
+    String line = wemoclient.readStringUntil('\r');
+  //Serial.print(line);
   }
-
+  wemoclient.stop();
+  wemoclient.flush();
 //  Serial.println();
 //  Serial.println("Closing connection");
 }

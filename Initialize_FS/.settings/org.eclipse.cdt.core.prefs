@@ -439,7 +439,7 @@ environment/project/io.sloeber.core.toolChain.release.1591680243/JANTJE.BOARD_NA
 environment/project/io.sloeber.core.toolChain.release.1591680243/JANTJE.BOARD_NAME/value=WeMos D1 R2 & mini
 environment/project/io.sloeber.core.toolChain.release.1591680243/JANTJE.COM_PORT/delimiter=;
 environment/project/io.sloeber.core.toolChain.release.1591680243/JANTJE.COM_PORT/operation=replace
-environment/project/io.sloeber.core.toolChain.release.1591680243/JANTJE.COM_PORT/value=COM10
+environment/project/io.sloeber.core.toolChain.release.1591680243/JANTJE.COM_PORT/value=COM19
 environment/project/io.sloeber.core.toolChain.release.1591680243/JANTJE.ECLIPSE_LOCATION/delimiter=;
 environment/project/io.sloeber.core.toolChain.release.1591680243/JANTJE.ECLIPSE_LOCATION/operation=replace
 environment/project/io.sloeber.core.toolChain.release.1591680243/JANTJE.ECLIPSE_LOCATION/value=C\:\\Dev\\eclipse\\
