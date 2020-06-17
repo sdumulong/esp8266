@@ -5,33 +5,33 @@
 #include <ArduinoJson.h>
 #include <ESP8266mDNS.h>
 
-struct struct_config {
-	const char* ssid;
-	const char* pwd;
-	const char* deviceID;
-	bool mqtt;
-	const char* mqttIP;
-	int mqttPort;
-	const char* mqttUser;
-	const char* mqttPwd;
-	const char* IPmode;
-	const char* staticIP;
-	const char* gateway;
-	const char* subnet;
-	const char* dns;
-	const char* mac;
-	bool syslog;
-	const char* syslogServer;
-	int syslogPort;
-	bool upnp;
-	bool api;
-	bool ssl;
-	const char* certPath;
+struct struct_conf {
+	String  ssid;
+	String  pwd;
+	String  deviceID;
+	bool    mqtt;
+	String  mqttIP;
+	int     mqttPort;
+	String  mqttUser;
+	String  mqttPwd;
+	String  IPmode;
+	String  staticIP;
+	String  gateway;
+	String  subnet;
+	String  dns;
+	String  mac;
+	bool    syslog;
+	String  syslogServer;
+	int     syslogPort;
+	bool    upnp;
+	bool    api;
+	bool    ssl;
+	String  certPath;
 };
 
 #define SERIAL_BAUDRATE	19200
 bool    	debug        = true; //Affiche sur la console si True
-struct struct_config config;
+struct struct_conf config;
 int     	serverPort   = 80;
 int     	pirPin       = D3;
 int     	microSwitch  = D8;
@@ -103,33 +103,47 @@ bool fsMounted = SPIFFS.begin();
 // Parse JSON read from FS
 //==================================================================================
 void parseConfigJson(String document)  {
+const char* value;
 	Serial.println("Parsing config file");
 
 	StaticJsonDocument<1152> doc;
 	deserializeJson(doc, document);
-	config.ssid         = doc["ssid"];
-	config.pwd          = doc["pwd"];
-	config.deviceID     = doc["deviceID"];
-	config.mqttIP       = doc["mqttIP"];
-	config.mqttUser     = doc["mqttUser"];
-	config.mqttPwd      = doc["mqttPwd"];
-	config.IPmode       = doc["IPmode"];
-	config.staticIP     = doc["staticIP"];
-	config.gateway      = doc["gateway"];
-	config.subnet       = doc["subnet"];
-	config.dns          = doc["dns"];
-	config.mac          = doc["mac"];
-	config.syslogServer = doc["syslogServer"];
-	config.certPath     = doc["certPath"];
+
+	value               = doc["ssid"];
+	config.ssid         = value;
+	value               = doc["pwd"];
+	config.pwd          = value;
+	value               = doc["deviceID"];
+	config.deviceID     = value;
+	value               = doc["mqttIP"];
+	config.mqttIP       = value;
+	value               = doc["mqttUser"];
+	config.mqttUser     = value;
+	value               = doc["mqttPwd"];
+	config.mqttPwd      = value;
+	value               = doc["IPmode"];
+	config.IPmode       = value;
+	value               = doc["staticIP"];
+	config.staticIP     = value;
+	value               = doc["gateway"];
+	config.gateway      = value;
+	value               = doc["subnet"];
+	config.subnet       = value;
+	value               = doc["dns"];
+	config.dns          = value;
+	value               = doc["mac"];
+	config.mac          = value;
+	value               = doc["syslogServer"];
+	config.syslogServer = value;
+	value               = doc["certPath"];
+	config.certPath     = value;
 	config.mqttPort     = atoi(doc["mqttPort"]);
 	config.syslogPort   = atoi(doc["syslogPort"]);
 	config.mqtt         = strstr( doc["mqtt"]  , "ON");
-	config.syslog 		= strstr( doc["syslog"], "ON");
-	config.upnp   		= strstr( doc["upnp"]  , "ON");
-	config.api    		= strstr( doc["api"]   , "ON");
-	config.ssl    		= strstr( doc["ssl"]   , "ON");
-
-	Serial.println(	config.certPath);
+	config.syslog 	    = strstr( doc["syslog"], "ON");
+	config.upnp   	    = strstr( doc["upnp"]  , "ON");
+	config.api    	    = strstr( doc["api"]   , "ON");
+	config.ssl    	    = strstr( doc["ssl"]   , "ON");
 }
 
 
@@ -254,13 +268,15 @@ void startAccessPoint() {
 //Connexion au réseau WiFi
 //********************************************************************************
 void setup_wifi() {
+const char* wifi_ssid     = config.ssid.c_str();
+const char* wifi_password = config.pwd.c_str();
 
   delay(10);
   Serial.println();
   Serial.print("Connecting to :");
   Serial.print(config.ssid);
   Serial.print(" ");
-  WiFi.begin(config.ssid, config.pwd);
+  WiFi.begin(wifi_ssid, wifi_password);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -271,7 +287,7 @@ void setup_wifi() {
   Serial.print("Addresse IP : ");
   Serial.println(WiFi.localIP());
   ip = WiFi.localIP();
-  if(mdns.begin(config.deviceID),WiFi.localIP())
+  if(mdns.begin(config.deviceID.c_str()),WiFi.localIP())
 	  Serial.println("\nmDNS Responder Started on http://" + String(config.deviceID));
 }
 
@@ -281,8 +297,8 @@ void setup_wifi() {
 // Configuration de la connexion MQTT
 //********************************************************************************
 void setup_mqtt() {
-  client.setServer(config.mqttIP, config.mqttPort); //Configuration de la connexion au serveur MQTT
-  client.setCallback(callback);                     //La fonction de callback qui est executée à chaque réception de message
+  client.setServer(config.mqttIP.c_str(), config.mqttPort); //Configuration de la connexion au serveur MQTT
+  client.setCallback(callback);                             //La fonction de callback qui est executée à chaque réception de message
   sub_Topics();
 }
 
@@ -385,7 +401,7 @@ void reconnect() { //Boucle jusqu'à obtenur une reconnexion
   while (!client.connected()) {
 	Serial.print("MQTT Connecxion of " + String(config.deviceID) + "...");
 
-    if (client.connect(config.deviceID)) {
+    if (client.connect(config.deviceID.c_str())) {
       Serial.println("OK");
       mqtt_status = "Connected";
       for (int i=0; i<nb_subscribe_topics; i++) {
@@ -427,7 +443,6 @@ void loop() {
 
 
 
-
 //****************************************************************************
 // Reset switch control
 //****************************************************************************
@@ -454,7 +469,6 @@ delay(100);
   	    ESP.restart();
     }
 }
-
 
 
 
@@ -506,7 +520,7 @@ String jsonStatus;
 	jsonStatus = CreateJsonStatus();
 	Serial.println(config.deviceID);
 	Serial.println(jsonStatus);
-	client.publish(config.deviceID,jsonStatus.c_str());
+	client.publish(config.deviceID.c_str(),jsonStatus.c_str());
 }
 
 
