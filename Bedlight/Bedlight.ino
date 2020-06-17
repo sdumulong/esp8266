@@ -45,7 +45,7 @@ struct struct_color {
 };
 
 #define SERIAL_BAUDRATE	19200
-bool    	debug        = true; //Affiche sur la console si True
+bool    	debug        = true;
 boolean 	Motion 		= 0;
 boolean 	LastMotion 	= 0;
 
