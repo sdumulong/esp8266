@@ -1,65 +1,81 @@
 #include <FS.h>
 #include <ESP8266WiFi.h>
-#include <PubSubClient.h>
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
+#include <PubSubClient.h>
 #include <ESP8266mDNS.h>
-#include <Syslog.h>
 
 
-struct struct_config {
-	const char* ssid;
-	const char* pwd;
-	const char* deviceID;
-	bool mqtt;
-	const char* mqttIP;
-	int mqttPort;
-	const char* mqttUser;
-	const char* mqttPwd;
-	const char* IPmode;
-	const char* staticIP;
-	const char* gateway;
-	const char* subnet;
-	const char* dns;
-	const char* mac;
-	bool syslog;
-	const char* syslogServer;
-	int syslogPort;
-	bool upnp;
-	bool api;
-	bool ssl;
-	const char* certPath;
+struct struct_conf {
+	String  ssid;
+	String  pwd;
+	String  deviceID;
+	bool    mqtt;
+	String  mqttIP;
+	int     mqttPort;
+	String  mqttUser;
+	String  mqttPwd;
+	String  IPmode;
+	String  staticIP;
+	String  gateway;
+	String  subnet;
+	String  dns;
+	String  mac;
+	bool    syslog;
+	String  syslogServer;
+	int     syslogPort;
+	bool    upnp;
+	bool    api;
+	bool    ssl;
+	String  certPath;
+};
+struct struct_conf conf;
+
+struct struct_color {
+	int  degre;
 };
 
 #define SERIAL_BAUDRATE	19200
 bool    	debug        = true; //Affiche sur la console si True
-struct struct_config config;
-int     	serverPort   = 80;
-int     	pirPin       = D7;
-int     	microSwitch  = D8;
-
 boolean 	Motion 		= 0;
 boolean 	LastMotion 	= 0;
-const char* APssid   	= "BedlightV3";
+
+int     	serverPort   = 80;
+int         pinRed       = D2;   // Ok
+int         pinGreen     = D5;   // Ok
+int         pinBlue      = D6;   // Ok
+int         pinWhite     = D4;
+int     	microSwitch  = D8;
+int     	pirPin       = D7;
+
+const char* APssid   	= "Bedlight";
 IPAddress 	ip;
 
-IPAddress 	local_IP(192,168,4,3);
+IPAddress 	local_IP(192,168,4,1);
 IPAddress 	gateway(192,168,4,255);
 IPAddress 	subnet(255,255,255,0);
 ESP8266WebServer server(serverPort); //Server on port
 
 char    message_buff[100];
 int     nb_subscribe_topics;
+int     pubDelay = 90;
 String  subscribe_topics[10];
+
 bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
 unsigned long lastMsg   = 0;    //Horodatage du dernier message publié sur MQTT
 String  activeColor = "#00000000";  //Light Value
 
+bool          rainbow = false;
+struct_color  rainbowColor;
+
+bool          christmas = false;
+struct_color  christmasColor;
+
+
 WiFiClient    espClient;  // @suppress("Abstract class cannot be instantiated")
 PubSubClient  client(espClient);
 MDNSResponder mdns;
-//UPnPDevice device;
 
 
 //===================================================================================
@@ -69,8 +85,18 @@ void setup() {
 	Serial.begin(SERIAL_BAUDRATE);   //Facultatif pour le debug
 	delay(10);
 
+	pinMode(pinRed,   OUTPUT);
+	pinMode(pinGreen, OUTPUT);
+	pinMode(pinBlue,  OUTPUT);
+	pinMode(pinWhite, OUTPUT);
+
+	analogWrite(pinRed,  0);
+	analogWrite(pinGreen,0);
+	analogWrite(pinBlue, 0);
+	analogWrite(pinWhite,0);
+
 	pinMode(microSwitch, INPUT);
-	pinMode(pirPin, INPUT);
+	pinMode(pirPin,      INPUT);
 	Serial.println('\n');
 
 	SPIFFS.begin();
@@ -80,10 +106,10 @@ void setup() {
 	} else {
 		readConfigFile();
 		setup_wifi();
-		if (config.ssl)    {setup_ssl();   }
-		if (config.mqtt)   {setup_mqtt();  }
-		if (config.syslog) {setup_syslog();}
-		if (config.api)    {setup_api();   }
+		if (conf.ssl)    {setup_ssl();   }
+		if (conf.mqtt)   {setup_mqtt();  }
+		if (conf.syslog) {setup_syslog();}
+		if (conf.api)    {setup_api();   }
 	}
 }
 
@@ -109,34 +135,48 @@ bool fsMounted = SPIFFS.begin();
 // Parse JSON read from FS
 //==================================================================================
 void parseConfigJson(String document)  {
+const char* value;
+
 	Serial.println("Parsing config file");
 
 	StaticJsonDocument<1152> doc;
 	deserializeJson(doc, document);
-//    Serial.print(document);
-	config.ssid         = doc["ssid"];
-	config.pwd          = doc["pwd"];
-	config.deviceID     = doc["deviceID"];
-	config.mqttIP       = doc["mqttIP"];
-	config.mqttUser     = doc["mqttUser"];
-	config.mqttPwd      = doc["mqttPwd"];
-	config.IPmode       = doc["IPmode"];
-	config.staticIP     = doc["staticIP"];
-	config.gateway      = doc["gateway"];
-	config.subnet       = doc["subnet"];
-	config.dns          = doc["dns"];
-	config.mac          = doc["mac"];
-	config.syslogServer = doc["syslogServer"];
-	config.certPath     = doc["certPath"];
-	config.mqttPort     = atoi(doc["mqttPort"]);
-	config.syslogPort   = atoi(doc["syslogPort"]);
-	config.mqtt         = strstr( doc["mqtt"]  , "ON");
-	config.syslog 		= strstr( doc["syslog"], "ON");
-	config.upnp   		= strstr( doc["upnp"]  , "ON");
-	config.api    		= strstr( doc["api"]   , "ON");
-	config.ssl    		= strstr( doc["ssl"]   , "ON");
 
-	Serial.println(	config.certPath);
+	value             = doc["ssid"];
+	conf.ssid         = value;
+	value             = doc["pwd"];
+	conf.pwd          = value;
+	value             = doc["deviceID"];
+	conf.deviceID     = value;
+	value             = doc["mqttIP"];
+	conf.mqttIP       = value;
+	value             = doc["mqttUser"];
+	conf.mqttUser     = value;
+	value             = doc["mqttPwd"];
+	conf.mqttPwd      = value;
+	value             = doc["IPmode"];
+	conf.IPmode       = value;
+	value             = doc["staticIP"];
+	conf.staticIP     = value;
+	value             = doc["gateway"];
+	conf.gateway      = value;
+	value             = doc["subnet"];
+	conf.subnet       = value;
+	value             = doc["dns"];
+	conf.dns          = value;
+	value             = doc["mac"];
+	conf.mac          = value;
+	value             = doc["syslogServer"];
+	conf.syslogServer = value;
+	value             = doc["certPath"];
+	conf.certPath     = value;
+	conf.mqttPort     = atoi(doc["mqttPort"]);
+	conf.syslogPort   = atoi(doc["syslogPort"]);
+	conf.mqtt         = strstr( doc["mqtt"]  , "ON");
+	conf.syslog 	  = strstr( doc["syslog"], "ON");
+	conf.upnp   	  = strstr( doc["upnp"]  , "ON");
+	conf.api    	  = strstr( doc["api"]   , "ON");
+	conf.ssl    	  = strstr( doc["ssl"]   , "ON");
 }
 
 
@@ -262,13 +302,15 @@ void startAccessPoint() {
 //Connexion au réseau WiFi
 //********************************************************************************
 void setup_wifi() {
+const char* wifi_ssid = conf.ssid.c_str();
+const char* wifi_password = conf.pwd.c_str();
 
   delay(10);
   Serial.println();
   Serial.print("Connecting to :");
-  Serial.print(config.ssid);
+  Serial.print(conf.ssid);
   Serial.print(" ");
-  WiFi.begin(config.ssid, config.pwd);
+  WiFi.begin(wifi_ssid, wifi_password);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -279,8 +321,8 @@ void setup_wifi() {
   Serial.print("Addresse IP : ");
   Serial.println(WiFi.localIP());
   ip = WiFi.localIP();
-  if(mdns.begin(config.deviceID),WiFi.localIP())
-	  Serial.println("\nmDNS Responder Started on http://" + String(config.deviceID));
+  if(mdns.begin(conf.deviceID.c_str()),WiFi.localIP())
+	  Serial.println("\nmDNS Responder Started on http://" + String(conf.deviceID));
 }
 
 
@@ -296,7 +338,7 @@ void setup_ssl() {
 // Configuration de la connexion MQTT
 //********************************************************************************
 void setup_mqtt() {
-  client.setServer(config.mqttIP, config.mqttPort); //Configuration de la connexion au serveur MQTT
+  client.setServer(conf.mqttIP.c_str(), conf.mqttPort); //Configuration de la connexion au serveur MQTT
   client.setCallback(callback);                     //La fonction de callback qui est executée à chaque réception de message
   sub_Topics();
 }
@@ -307,11 +349,11 @@ void setup_mqtt() {
 //********************************************************************************
 void sub_Topics(){
 	 nb_subscribe_topics = 5;
-	 subscribe_topics[0] = String(config.deviceID) + "/Config" ;
-	 subscribe_topics[1] = String(config.deviceID) + "/Reset"  ;
-	 subscribe_topics[2] = String(config.deviceID) + "/State"  ;
-	 subscribe_topics[3] = String(config.deviceID) + "/Color"  ;
-	 subscribe_topics[4] = String(config.deviceID) + "/Restart";
+	 subscribe_topics[0] = String(conf.deviceID) + "/Config" ;
+	 subscribe_topics[1] = String(conf.deviceID) + "/Reset"  ;
+	 subscribe_topics[2] = String(conf.deviceID) + "/State"  ;
+	 subscribe_topics[3] = String(conf.deviceID) + "/Color"  ;
+	 subscribe_topics[4] = String(conf.deviceID) + "/Restart";
 }
 
 
@@ -330,11 +372,11 @@ void setup_syslog() {
 void setup_api() {
     Serial.print("Starting API service...");
 	server.on("/"       , handleRootDevice); // @suppress("Ambiguous problem")
-	server.on("/Config" , handleConfig); // @suppress("Ambiguous problem")
-	server.on("/Reset"  , handleReset); // @suppress("Ambiguous problem")
-	server.on("/State"  , handleState); // @suppress("Ambiguous problem")
-	server.on("/Color"  , handleColor); // @suppress("Ambiguous problem")
-	server.on("/Restart", handleRestart); // @suppress("Ambiguous problem")
+	server.on("/Config" , handleConfig);     // @suppress("Ambiguous problem")
+	server.on("/Reset"  , handleReset);      // @suppress("Ambiguous problem")
+	server.on("/State"  , handleState);      // @suppress("Ambiguous problem")
+	server.on("/Color"  , handleColor);      // @suppress("Ambiguous problem")
+	server.on("/Restart", handleRestart);    // @suppress("Ambiguous problem")
 
 	server.begin(); //Start API server
 	Serial.println("OK\n");
@@ -348,7 +390,7 @@ void setup_api() {
 //********************************************************************************
 void handleRootDevice() {
     Serial.println("Root request");
-    server.send(200, "<! DOCTYPE json>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Device " + String(config.deviceID) +" is listening</body></html>" );
+    server.send(200, "<! DOCTYPE json>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Device " + conf.deviceID +" is listening</body></html>" );
 }
 
 
@@ -385,9 +427,9 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
 void handleState() {
 String value = "";
 
-	Serial.println("State request");
-	value = server.arg("value");
-    server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>State changed for " + value + "</body></html>" );
+//	Serial.println("State request");
+//	value = server.arg("value");
+//    server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>State changed for " + value + "</body></html>" );
 }
 
 
@@ -396,9 +438,9 @@ String value = "";
 //********************************************************************************
 void handleColor() {
 String value = "";
-	Serial.println("Color request");
-	value = server.arg("value");
-    server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Color set to " + value + "</body></html>" );
+//	Serial.println("Color request");
+//	value = server.arg("value");
+//    server.send(200, "<! DOCTYPE html>", "<html><head><meta http-equiv=\"Content-Language\" content=\"en-ca\"><meta name=\"viewport\" content=\"width=device-width, user-scalable=no\"head><body>Color set to " + value + "</body></html>" );
 }
 
 
@@ -436,9 +478,9 @@ std::size_t i;
 void reconnect() { //Boucle jusqu'à obtenur une reconnexion
 
   while (!client.connected()) {
-    Serial.print("MQTT Connecxion of " + String(config.deviceID) + "...");
+    Serial.print("MQTT Connecxion of " + String(conf.deviceID) + "...");
 
-    if (client.connect(config.deviceID)) {
+    if (client.connect(conf.deviceID.c_str())) {
       Serial.println("OK");
       mqtt_status = "Connected";
       for (int i=0; i<nb_subscribe_topics; i++) {
@@ -461,24 +503,54 @@ void reconnect() { //Boucle jusqu'à obtenur une reconnexion
 //  Main Loop
 //==================================================================================
 void loop() {
-	if (modeAccessPoint or config.api) {
+	if (modeAccessPoint or conf.api) {
 		server.handleClient(); }
 
 	if (!modeAccessPoint) {
-		if (config.mqtt){
+		if (conf.mqtt){
 			if (!client.connected()) { reconnect(); }
 		    client.loop();
 		}
-		monitorResetSwitch();
 		PublishMotionSensor();
+		monitorResetSwitch();
 		unsigned long now = millis();
-		if (now - lastMsg > (1000 * 30)) {
+		if (now - lastMsg > (1000 * pubDelay)) {
 			lastMsg = now;
 			PublishLightStatus();
 		}
+		if (rainbow)   { SetRainbowColor();   }
+		if (christmas) { SetChristmasColor(); }
 	}
 }
 
+
+
+
+//****************************************************************************
+// Publish Motion Sensor
+//****************************************************************************
+void PublishMotionSensor() {
+String jsonMotionStatus;
+String topic =  String(conf.deviceID) + "/Motion";
+
+  Motion = digitalRead(pirPin);
+  if (Motion != LastMotion) {
+    if (Motion == HIGH) {
+		StaticJsonDocument<64> doc;
+		doc["Motion"]     = "1";
+		doc["MotionDesc"] = "Motion detected";
+		serializeJson(doc, jsonMotionStatus);
+		client.publish(topic.c_str(), jsonMotionStatus.c_str());
+    } else {
+		StaticJsonDocument<64> doc;
+		doc["Motion"]     = "0";
+		doc["MotionDesc"] = "No Motion detected";
+		serializeJson(doc, jsonMotionStatus);
+		client.publish(topic.c_str(), jsonMotionStatus.c_str());
+    }
+    LastMotion = Motion;
+  }
+}
 
 
 
@@ -515,32 +587,11 @@ delay(100);
 
 
 //****************************************************************************
-// Publish Motion Sensor
-//****************************************************************************
-void PublishMotionSensor() {
-String jsonMotionStatus;
-String topic =  String(config.deviceID) + "/Motion";
-
-  Motion = digitalRead(pirPin);
-  if (Motion != LastMotion) {
-    if (Motion == HIGH) {
-		StaticJsonDocument<64> doc;
-		doc["Motion"]     = 0;
-		doc["MotionDesc"] = "Motion detected";
-		serializeJson(doc, jsonMotionStatus);
-		client.publish(topic.c_str(), jsonMotionStatus.c_str());
-    }
-    LastMotion = Motion;
-  }
-}
-
-
-//****************************************************************************
 // Publishing Light Status
 //****************************************************************************
 void PublishLightStatus() {
 String jsonLightStatus;
-String topic = String(config.deviceID)  + "/Light";
+String topic = conf.deviceID  + "/Light";
 
 	StaticJsonDocument<64> doc;
 	if (activeColor == "#00000000") {
@@ -553,6 +604,10 @@ String topic = String(config.deviceID)  + "/Light";
 	doc["Color"]  = activeColor;
 	serializeJson(doc, jsonLightStatus);
 	client.publish(topic.c_str(), jsonLightStatus.c_str());
+
+	Serial.print("Publishing light status to : ");
+	Serial.print(topic.c_str());
+	Serial.print("   ");
 	Serial.println(jsonLightStatus.c_str());
 }
 
@@ -563,18 +618,16 @@ String topic = String(config.deviceID)  + "/Light";
 // Traiter message recu
 //********************************************************************************
 void TraiterMessageRecu(String topic, String payload) {
-void(* resetFunc) (void) = 0; //declare reset function @ address 0
 
  if (debug) { Serial.println("Topic recu => " + topic + " Payload: " + payload); }
-
  if (topic == subscribe_topics[0]) { DisplayConfig(); }
  if (topic == subscribe_topics[1]) {
      SPIFFS.begin();
      SPIFFS.remove("/config.json");
-     resetFunc(); }
+     ESP.restart(); }
  if (topic == subscribe_topics[2]) { SetState(payload); }
  if (topic == subscribe_topics[3]) { SetColor(payload); }
- if (topic == subscribe_topics[4]) { resetFunc();       }
+ if (topic == subscribe_topics[4]) { ESP.restart();     }
 }
 
 
@@ -582,13 +635,12 @@ void(* resetFunc) (void) = 0; //declare reset function @ address 0
 
 //********************************************************************************
 // Display controler status
-//********************************************************************************
+//************************************************	********************************
 void DisplayConfig() {
 String jsonStatus;
 	jsonStatus = CreateJsonStatus();
-	Serial.println(config.deviceID);
 	Serial.println(jsonStatus);
-	client.publish(config.deviceID,jsonStatus.c_str());
+	client.publish(conf.deviceID.c_str(),jsonStatus.c_str());
 }
 
 
@@ -600,33 +652,33 @@ String jsonStatus;
 String CreateJsonStatus() {
 String jsonStatus;
  	 StaticJsonDocument<2048> doc;
- 	 doc["SSID"]             = config.ssid;
+ 	 doc["SSID"]             = conf.ssid;
  	 doc["Wifi Connection"]  = "Established";
  	 doc["Local IP"]         = ip.toString();
  	 doc["AccessPoint SSID"] = APssid;
  	 doc["AccessPoint IP"]   = local_IP.toString();
- 	 doc["Device ID"]        = config.deviceID;
- 	 doc["mqtt"]             = config.mqtt; ;
- 	 doc["mqtt IP"]          = config.mqttIP;
- 	 doc["mqtt Port"]        = config.mqttPort;
- 	 doc["mqtt User"]        = config.mqttUser;
+ 	 doc["Device ID"]        = conf.deviceID;
+ 	 doc["mqtt"]             = conf.mqtt; ;
+ 	 doc["mqtt IP"]          = conf.mqttIP;
+ 	 doc["mqtt Port"]        = conf.mqttPort;
+ 	 doc["mqtt User"]        = conf.mqttUser;
  	 doc["mqtt Password"]    = "***************";
  	 doc["mqtt status"]      = mqtt_status;
- 	 doc["IP Mode"]          = config.IPmode;
- 	 doc["Static IP"]        = config.staticIP;
- 	 doc["gateway"]          = config.gateway;
- 	 doc["subnet"]           = config.subnet;
- 	 doc["dns"]              = config.dns;
- 	 doc["mac"]              = config.mac;
- 	 doc["syslog"]           = config.syslog;
- 	 doc["syslogServer"]     = config.syslogServer;
- 	 doc["syslogPort"]       = config.syslogPort;
- 	 doc["certPath"]         = config.certPath;
- 	 doc["upnp"]             = config.upnp;
- 	 doc["api"]              = config.api;
- 	 doc["ssl"]              = config.ssl;
+ 	 doc["IP Mode"]          = conf.IPmode;
+ 	 doc["Static IP"]        = conf.staticIP;
+ 	 doc["gateway"]          = conf.gateway;
+ 	 doc["subnet"]           = conf.subnet;
+ 	 doc["dns"]              = conf.dns;
+ 	 doc["mac"]              = conf.mac;
+ 	 doc["syslog"]           = conf.syslog;
+ 	 doc["syslogServer"]     = conf.syslogServer;
+ 	 doc["syslogPort"]       = conf.syslogPort;
+ 	 doc["certPath"]         = conf.certPath;
+ 	 doc["upnp"]             = conf.upnp;
+ 	 doc["api"]              = conf.api;
+ 	 doc["ssl"]              = conf.ssl;
  	 doc["debug"]            = debug;
- 	 doc["pool delay"]       = 30;
+ 	 doc["pool delay"]       = pubDelay;
 
  	 serializeJson(doc, jsonStatus);
  	 return jsonStatus;
@@ -638,6 +690,11 @@ String jsonStatus;
 // Set State of Peripheral (On/Off)
 //********************************************************************************
 void SetState(String payload) {
+String SaveActiveColor = activeColor;
+
+rainbow   = false;
+christmas = false;
+
   if (payload == "On") {
 	  colorRGB(ReadSavedColor());
 	  PublishLightStatus();
@@ -648,19 +705,106 @@ void SetState(String payload) {
      PublishLightStatus();
      return;
   }
+  if (payload == "BlinkRed") {
+	 if (SaveActiveColor != "#00000000") {
+	     colorRGB("#00000000");
+	     delay(500);
+	 }
+     for (int i=0; i<5; i++) {
+    	 colorRGB("#FF000000");
+    	 delay(500);
+    	 colorRGB("#00000000");
+    	 delay(500);
+     }
+	 colorRGB(SaveActiveColor);
+     return;
+  }
+  if (payload == "BlinkGreen") {
+	 if (SaveActiveColor != "#00000000") {
+	     colorRGB("#00000000");
+	     delay(500);
+	 }
+     for (int i=0; i<5; i++) {
+    	 colorRGB("#00FF0000");
+    	 delay(500);
+    	 colorRGB("#00000000");
+    	 delay(500);
+     }
+	 colorRGB(SaveActiveColor);
+     return;
+  }
+  if (payload == "BlinkBlue") {
+	 if (SaveActiveColor != "#00000000") {
+	     colorRGB("#00000000");
+	     delay(500);
+	 }
+     for (int i=0; i<5; i++) {
+    	 colorRGB("#0000FF00");
+    	 delay(500);
+    	 colorRGB("#00000000");
+    	 delay(500);
+     }
+	 colorRGB(SaveActiveColor);
+     return;
+  }
+  if (payload == "BlinkWhite") {
+	 if (SaveActiveColor != "#00000000") {
+	     colorRGB("#00000000");
+	     delay(500);
+	 }
+     for (int i=0; i<5; i++) {
+    	 colorRGB("#FFFFFFFF");
+    	 delay(500);
+    	 colorRGB("#00000000");
+    	 delay(500);
+     }
+	 colorRGB(SaveActiveColor);
+     return;
+  }
+  if (payload == "Blink") {
+	 String FSColor = ReadSavedColor();
+	 if (SaveActiveColor != "#00000000") {
+	     colorRGB("#00000000");
+	     delay(500);
+	 }
+     for (int i=0; i<5; i++) {
+    	 colorRGB(FSColor);
+    	 delay(500);
+    	 colorRGB("#00000000");
+    	 delay(500);
+     }
+	 colorRGB(SaveActiveColor);
+     return;
+  }
+  if (payload == "Rainbow") {
+	  colorRGB("#0100000A");
+	  rainbow            = true;
+	  rainbowColor.degre = 0;
+      return;
+  }
+  if (payload == "Christmas") {
+	  christmas            = true;
+	  christmasColor.degre = 0;
+      return;
+  }
 }
+
 
 
 //********************************************************************************
 // Set Color of Light in Hexa format #FFFFFFFF (4 colors)
 //********************************************************************************
 void SetColor(String payload) {
+
+	rainbow   = false;
+	christmas = false;
+
 	if (payload.substring(0,1) == "#") {
+		if (payload.length() < 8) {  payload += "00"; }
 		activeColor = payload;
 		SaveColorValue(activeColor);
 	  	colorRGB(activeColor);
  	  	PublishLightStatus();
-	  	//Serial.println("New Color " + activeColor );
 	  	return;
 	}
 }
@@ -686,6 +830,7 @@ const char* color = "";
 	 } else {
 		 return "#FFFFFFFF";
 	 }
+	 return "#00000000";
 }
 
 
@@ -695,15 +840,15 @@ const char* color = "";
 //********************************************************************************
 void SaveColorValue(String color) {
 String jsonStatus;
-	StaticJsonDocument<64> doc;
+
+	StaticJsonDocument<128> doc;
 	doc["color"] = color;
 	serializeJson(doc, jsonStatus);
-	File file = SPIFFS.open("/savedcolor.json", "w"); // @suppress("Abstract class cannot be instantiated")
-	file.print(jsonStatus);
-	Serial.print("Saving color :");
-	Serial.println(jsonStatus);
-//  int bytesWritten = file.print(deviceJson);
-	file.close();
+
+	File file2 = SPIFFS.open("/savedcolor.json", "w"); // @suppress("Abstract class cannot be instantiated")
+	file2.print(jsonStatus);
+    // int bytesWritten = file.print(deviceJson);
+	file2.close();
 }
 
 
@@ -715,9 +860,6 @@ String jsonStatus;
 void colorRGB(String HexValue){
 
   activeColor = HexValue;
-//  Serial.print("colorRGB ");
-//  Serial.println(HexValue);
-
   unsigned long number = (unsigned long) strtoul( &HexValue[1], NULL, 16);
 
   int subStringR = number >> 24;
@@ -725,40 +867,11 @@ void colorRGB(String HexValue){
   int subStringB = number >> 8 & 0xFF;
   int subStringW = number & 0xFF;
 
-  analogWrite(D1,subStringR);
-  analogWrite(D2,subStringG);
-  analogWrite(D3,subStringB);
-//analogWrite(D4,subStringW,0,255));
+  analogWrite(pinRed,map(subStringR, 0, 255, 0 ,1024));
+  analogWrite(pinGreen,map(subStringG, 0, 255, 0 ,1024));
+  analogWrite(pinBlue,map(subStringB, 0, 255, 0 ,1024));
+  analogWrite(pinWhite,map(subStringW, 0, 255, 0 ,1024));
 }
-
-
-
-//********************************************************************************
-// Save device state
-//********************************************************************************
-void SaveDeviceState() {
-String deviceJson;
-
- Serial.println("\nSaving device state");
- bool fsMounted = SPIFFS.begin();
- if (fsMounted) {
-	 File file = SPIFFS.open("/device.json", "w"); // @suppress("Abstract class cannot be instantiated")
-	 if (!file) { Serial.println("Error opening file /device.json");
-     	 return;  }
-	 Serial.println("Reception of Data");
-	 StaticJsonDocument<256> doc;
-	 doc["deviceID"] = config.deviceID;
-	 doc["timeStamp"] = "TimeStamp";
-	 doc["color"] = "Color";
-	 doc["poolingTime"]= "30";
-	 serializeJson(doc, deviceJson);
-
-	 file.print(deviceJson);
-//	 int bytesWritten = file.print(deviceJson);
-	 file.close();
- }
-}
-
 
 
 //********************************************************************************
@@ -784,4 +897,75 @@ String htmlPage;
   }
 }
 
+
+
+//********************************************************************************
+// Set Rainbow Color
+//********************************************************************************
+void SetRainbowColor() {
+String HexValue;
+int    tmpRed   = 0;
+int    tmpGreen = 0;
+int    tmpBlue  = 0;
+
+	rainbowColor.degre++;
+
+	if (rainbowColor.degre >= 00 and rainbowColor.degre < 61 ) {             // 1   ++000000
+		tmpRed = map(rainbowColor.degre, 0, 60, 0 ,255);
+		if (tmpRed < 16) { HexValue = "#0" + String(tmpRed, HEX) + "00000A";
+		}else{ HexValue = "#"  + String(tmpRed, HEX) + "00000A";	}
+	}
+	if (rainbowColor.degre >= 61 and rainbowColor.degre < 121 ) {            // 2   FF++0000
+		tmpGreen = map(rainbowColor.degre, 61, 120, 0 ,255);
+		if (tmpGreen < 16) { HexValue = "#FF0" + String(tmpGreen, HEX) + "000A";
+		}else{ HexValue = "#FF"  + String(tmpGreen, HEX) + "000A";
+		}
+	}
+	if (rainbowColor.degre >= 121 and rainbowColor.degre < 181 ) {           // 3   --FF0000
+		tmpRed = map(rainbowColor.degre, 121, 180, 255 ,0);
+		if (tmpRed < 16) { HexValue = "#0" + String(tmpRed, HEX) + "FF000A";
+		}else{ HexValue = "#"  + String(tmpRed, HEX) + "FF000A";
+		}
+	}
+	if (rainbowColor.degre >= 181 and rainbowColor.degre < 241 ) {           // 4 	00FF++00
+		tmpBlue = map(rainbowColor.degre, 181, 240, 0 ,255);
+		if (tmpBlue < 16) {	HexValue = "#00FF0" + String(tmpBlue, HEX) + "0A";
+		}else{ HexValue = "#00FF"  + String(tmpBlue, HEX) + "0A";
+		}
+	}
+	if (rainbowColor.degre >= 241 and rainbowColor.degre < 301 ) {           // 5   00--FF00
+		tmpGreen = map(rainbowColor.degre, 241, 300, 255 , 0);
+		if (tmpGreen < 16) { HexValue = "#000" + String(tmpGreen, HEX) + "FF0A";
+		}else{ HexValue = "#00"  + String(tmpGreen, HEX) + "FF0A";
+		}
+	}
+	if (rainbowColor.degre >= 301 and rainbowColor.degre < 361 ) {           // 6   0000--00
+		tmpBlue  = map(rainbowColor.degre, 301, 360, 255 , 0);
+		if (tmpBlue < 16) {	HexValue = "#00000" + String(tmpBlue, HEX) + "0A";
+		}else{ HexValue = "#0000"  + String(tmpBlue, HEX) + "0A";
+		}
+	}
+	if (rainbowColor.degre >= 361) {
+		rainbowColor.degre = 0;
+		HexValue = "#0100000A";
+	}
+//	Serial.println(rainbowColor.degre);
+//	Serial.println(HexValue);
+	colorRGB(HexValue);
+}
+
+
+
+//********************************************************************************
+// Set Christmas Color
+//********************************************************************************
+void SetChristmasColor() {
+
+	christmasColor.degre++;
+	if (christmasColor.degre >= 00 and christmasColor.degre < 10 ) { colorRGB("#FF000000"); }
+	if (christmasColor.degre >= 10 and christmasColor.degre < 20 ) { colorRGB("#00FF0000"); }
+	if (christmasColor.degre >= 20 and christmasColor.degre < 30 ) { colorRGB("#0000FF00"); }
+	if (christmasColor.degre >= 30 and christmasColor.degre < 40 ) { colorRGB("#FFFFFFFF"); }
+	if (christmasColor.degre >= 40) { christmasColor.degre = 0; }
+}
 
