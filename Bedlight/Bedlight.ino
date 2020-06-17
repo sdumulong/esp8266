@@ -1,3 +1,12 @@
+// D1 = Pin-D3
+// D2 = Pin-D4, Pin-D14
+// D3 = Pin-D8
+// D4 = Pin-D9
+// D5 = Pin-D5, Pin-D13
+// D6 = Pin-D6, Pin-D12
+// D7 = Pin-D7, Pin-D11
+// D8 = Pin-D10
+
 #include <FS.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
