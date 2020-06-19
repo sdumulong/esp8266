@@ -1,3 +1,12 @@
+// D1 = Pin-D3
+// D2 = Pin-D4, Pin-D14
+// D3 = Pin-D8
+// D4 = Pin-D9
+// D5 = Pin-D5, Pin-D13
+// D6 = Pin-D6, Pin-D12
+// D7 = Pin-D7, Pin-D11
+// D8 = Pin-D10
+
 #include <FS.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
@@ -36,8 +45,9 @@ struct struct_color {
 };
 
 #define SERIAL_BAUDRATE	19200
-bool    	debug        = true; //Affiche sur la console si True
-
+bool    	debug        = true;
+boolean 	Motion 		= 0;
+boolean 	LastMotion 	= 0;
 
 int     	serverPort   = 80;
 int         pinRed       = D1;
@@ -51,7 +61,7 @@ int         pin          = D4;  // Internal Led : LED_BUILTIN
 const char* APssid   	= "Comptoir";
 IPAddress 	ip;
 
-IPAddress 	local_IP(192,168,4,3);
+IPAddress 	local_IP(192,168,4,1);
 IPAddress 	gateway(192,168,4,255);
 IPAddress 	subnet(255,255,255,0);
 ESP8266WebServer server(serverPort); //Server on port
@@ -65,9 +75,6 @@ bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
 unsigned long lastMsg   = 0;    //Horodatage du dernier message publié sur MQTT
 String  activeColor = "#00000000";  //Light Value
-boolean 	Motion 		= 0;
-boolean 	LastMotion 	= 0;
-
 
 bool          rainbow = false;
 struct_color  rainbowColor;
@@ -88,24 +95,21 @@ void setup() {
 	Serial.begin(SERIAL_BAUDRATE);   //Facultatif pour le debug
 	delay(10);
 
-	SPIFFS.begin();
-//	SPIFFS.remove("/config.json");
-
-	pinMode(pinRed,      OUTPUT);
-	pinMode(pinGreen,    OUTPUT);
-	pinMode(pinBlue,     OUTPUT);
-	pinMode(pinWhite,    OUTPUT);
-	pinMode(microSwitch, INPUT);
-	pinMode(pirPin,      INPUT);
+	pinMode(pinRed,   OUTPUT);
+	pinMode(pinGreen, OUTPUT);
+	pinMode(pinBlue,  OUTPUT);
+	pinMode(pinWhite, OUTPUT);
 
 	analogWrite(pinRed,  0);
 	analogWrite(pinGreen,0);
 	analogWrite(pinBlue, 0);
 	analogWrite(pinWhite,0);
 
-
+	pinMode(microSwitch, INPUT);
+	pinMode(pirPin,      INPUT);
 	Serial.println('\n');
 
+	SPIFFS.begin();
 	if (!SPIFFS.exists("/config.json")) {
 		mdns.begin("ESP8266-Setup",local_IP);
 		startAccessPoint();
@@ -517,8 +521,8 @@ void loop() {
 			if (!client.connected()) { reconnect(); }
 		    client.loop();
 		}
+		PublishMotionSensor();
 		monitorResetSwitch();
-		monitorMotion();
 		unsigned long now = millis();
 		if (now - lastMsg > (1000 * pubDelay)) {
 			lastMsg = now;
@@ -529,6 +533,34 @@ void loop() {
 	}
 }
 
+
+
+
+//****************************************************************************
+// Publish Motion Sensor
+//****************************************************************************
+void PublishMotionSensor() {
+String jsonMotionStatus;
+String topic =  String(conf.deviceID) + "/Motion";
+
+  Motion = digitalRead(pirPin);
+  if (Motion != LastMotion) {
+    if (Motion == HIGH) {
+		StaticJsonDocument<64> doc;
+		doc["Motion"]     = "1";
+		doc["MotionDesc"] = "Motion detected";
+		serializeJson(doc, jsonMotionStatus);
+		client.publish(topic.c_str(), jsonMotionStatus.c_str());
+    } else {
+		StaticJsonDocument<64> doc;
+		doc["Motion"]     = "0";
+		doc["MotionDesc"] = "No Motion detected";
+		serializeJson(doc, jsonMotionStatus);
+		client.publish(topic.c_str(), jsonMotionStatus.c_str());
+    }
+    LastMotion = Motion;
+  }
+}
 
 
 
@@ -562,26 +594,6 @@ delay(100);
     }
 }
 
-
-//****************************************************************************
-// Reset switch control
-//****************************************************************************
-void monitorMotion() {
-
-	String topic =  String(conf.deviceID.c_str()) + "/Motion";
-	Motion = digitalRead(pirPin);
-
-	if (Motion != LastMotion) {
-		if (Motion == HIGH) {
-			client.publish(topic.c_str(), "1");
-	      if (debug) { Serial.println("Publishing Motion detected");}
-	    } else {
-	    	client.publish(topic.c_str(), "0");
-	      if (debug) { Serial.println("Publishing No motion detected"); }
-	    }
-	    LastMotion = Motion;
-	  }
-}
 
 
 //****************************************************************************
@@ -966,3 +978,4 @@ void SetChristmasColor() {
 	if (christmasColor.degre >= 30 and christmasColor.degre < 40 ) { colorRGB("#FFFFFFFF"); }
 	if (christmasColor.degre >= 40) { christmasColor.degre = 0; }
 }
+
