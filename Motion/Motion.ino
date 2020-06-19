@@ -41,7 +41,7 @@ boolean 	LastMotion 	= 0;
 const char* APssid   	= "Motion";
 IPAddress 	ip;
 
-IPAddress 	local_IP(192,168,4,3);
+IPAddress 	local_IP(192,168,4,1);
 IPAddress 	gateway(192,168,4,255);
 IPAddress 	subnet(255,255,255,0);
 ESP8266WebServer server(serverPort); //Server on port
@@ -476,17 +476,24 @@ delay(100);
 // Reset switch control
 //****************************************************************************
 void monitorMotion() {
+String jsonMotionStatus;
+String topic =  String(config.deviceID) + "/Motion";
+char timestamp[20];
 
-	String topic =  String(config.deviceID) + "/Motion";
-	Motion = digitalRead(pirPin);
-
-	if (Motion != LastMotion) {
-		if (Motion == HIGH) {
-			client.publish(topic.c_str(), "1");
-	      if (debug) { Serial.println("Publishing Motion detected");}
+	  Motion = digitalRead(pirPin);
+	  if (Motion != LastMotion) {
+	    if (Motion == HIGH) {
+			StaticJsonDocument<64> doc;
+			doc["Motion"]     = 1;
+			doc["MotionDesc"] = "Motion detected";
+			serializeJson(doc, jsonMotionStatus);
+			client.publish(topic.c_str(), jsonMotionStatus.c_str());
 	    } else {
-	    	client.publish(topic.c_str(), "0");
-	      if (debug) { Serial.println("Publishing No motion detected"); }
+			StaticJsonDocument<64> doc;
+			doc["Motion"]     = 0;
+			doc["MotionDesc"] = "No Motion detected";
+			serializeJson(doc, jsonMotionStatus);
+			client.publish(topic.c_str(), jsonMotionStatus.c_str());
 	    }
 	    LastMotion = Motion;
 	  }
