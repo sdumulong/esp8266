@@ -26,6 +26,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/ArduinoJson-6.x/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/PubSubClient/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/ESP8266mDNS}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/DHT_sensor_library}&quot;"/>
 								</option>
 								<inputType id="io.sloeber.compiler.cpp.sketch.input.1815815273" name="CPP source files" superClass="io.sloeber.compiler.cpp.sketch.input"/>
 							</tool>
@@ -38,6 +39,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/ArduinoJson-6.x/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/PubSubClient/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/ESP8266mDNS}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/DHT_sensor_library}&quot;"/>
 								</option>
 								<inputType id="io.sloeber.compiler.c.sketch.input.1507355838" name="C Source Files" superClass="io.sloeber.compiler.c.sketch.input"/>
 							</tool>
@@ -50,6 +52,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/ArduinoJson-6.x/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/PubSubClient/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/ESP8266mDNS}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/Bedlight/libraries/DHT_sensor_library}&quot;"/>
 								</option>
 								<inputType id="io.sloeber.compiler.S.sketch.input.3691168" name="Assembly source files" superClass="io.sloeber.compiler.S.sketch.input"/>
 							</tool>
