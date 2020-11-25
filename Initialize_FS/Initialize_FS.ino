@@ -16,6 +16,12 @@ void setup() {
     Serial.println("Error mounting the file system");
     return;
   }
+
+//  if (!SPIFFS.exists("/config.json")) {
+	Serial.println("Deleting Config file");
+	SPIFFS.remove("/config.json");
+//  }
+
   CreateSetupPage();
   CreateSuccessPage();
   CreateFailedPage();
@@ -73,6 +79,7 @@ String strhtml="<html><head><meta http-equiv=\"Content-Language\" content=\"en-c
  }
  file.close();
  delay(10);
+
 }
 
 
