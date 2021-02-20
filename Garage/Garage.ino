@@ -1,11 +1,11 @@
-// D1 = Pin-D3
-// D2 = Pin-D4, Pin-D14
+// D1 = Pin-D3                   *
+// D2 = Pin-D4, Pin-D14          *
 // D3 = Pin-D8
-// D4 = Pin-D9
-// D5 = Pin-D5, Pin-D13
-// D6 = Pin-D6, Pin-D12
-// D7 = Pin-D7, Pin-D11
-// D8 = Pin-D10
+// D4 = Pin-D9                   *
+// D5 = Pin-D5, Pin-D13          *
+// D6 = Pin-D6, Pin-D12          *
+// D7 = Pin-D7, Pin-D11          *
+// D8 = Pin-D10                  *
 
 #include <FS.h>
 #include <ESP8266WiFi.h>
@@ -42,9 +42,12 @@ struct struct_conf {
 struct struct_conf conf;
 
 // D1 pin definition
+int pin03=D1;
+int pin04=D2;
 int pin06=D6;
 int pin07=D7;
 int pin08=D3;
+int pin09=D4;
 int pin12=D6;
 int pin13=D5;
 
@@ -54,12 +57,16 @@ boolean 	Motion 		= false;
 boolean 	LastMotion 	= false;
 boolean 	frontDoor 	= false;
 boolean 	backDoor 	= false;
+long duration;  // variable for the duration of sound wave travel
+int  distance;  // variable for the distance measurement
 
 int     	serverPort   = 80;
-int     	pirPin       = pin07;
+int     	HC_SR04_Trig = pin03;
+int     	HC_SR04_Echo = pin04;
 int     	reed2        = pin06;
-int     	reed1        = pin13;
+int     	pirPin       = pin07;
 int     	button       = pin08;
+int     	reed1        = pin13;
 
 const char* APssid   	= "Garage";
 IPAddress 	ip;
@@ -79,7 +86,7 @@ String  mqtt_status = "Not connected";
 unsigned long lastMsg   = 0;    //Horodatage du dernier message publié sur MQTT
 
 // DHT Definition
-#define DHTPIN  pin12
+#define DHTPIN  pin09
 #define DHTTYPE DHT22
 
 WiFiClient    espClient;  // @suppress("Abstract class cannot be instantiated")
@@ -96,9 +103,12 @@ void setup() {
 	delay(10);
 
 	pinMode(pirPin,  INPUT);
+	pinMode(DHTPIN,  INPUT);
 	pinMode(reed1,   INPUT_PULLUP);
 	pinMode(reed2,   INPUT_PULLUP);
 	pinMode(button,  OUTPUT);
+    pinMode(HC_SR04_Trig, OUTPUT); // Sets the trigPin as an OUTPUT
+	pinMode(HC_SR04_Echo, INPUT);  // Sets the echoPin as an INPUT
 
     digitalWrite(button, LOW);
 	Serial.println('\n');
@@ -491,12 +501,32 @@ void loop() {
 		}
 		PublishMotionSensor();
 		MonitorGarageDoor();
+
 		unsigned long now = millis();
 		if (now - lastMsg > (1000 * pubDelay)) {
 			lastMsg = now;
+			MonitorDistance();
 			PublishGarageStatus();
 		}
 	}
+}
+
+
+
+
+//****************************************************************************
+// Monitor Distance
+//****************************************************************************
+void MonitorDistance() {
+	digitalWrite(HC_SR04_Trig, LOW);
+	delayMicroseconds(2);
+
+	digitalWrite(HC_SR04_Trig, HIGH);
+	delayMicroseconds(10);
+	digitalWrite(HC_SR04_Trig, LOW);
+
+	duration = pulseIn(HC_SR04_Echo, HIGH);
+	distance = duration * 0.034 / 2; // Speed of sound wave divided by 2 (go and back)
 }
 
 
@@ -561,15 +591,16 @@ float  humidity    = dht.readHumidity();
 delay(200);
 float  temperature = dht.readTemperature();
 
-    Serial.println(humidity);
-    Serial.println(temperature);
+//    Serial.println(humidity);
+//    Serial.println(temperature);
 
-	StaticJsonDocument<64> doc;
+	StaticJsonDocument<128> doc;
 
 	doc["temperature"] = temperature;
 	doc["humidity"]    = humidity;
 	doc["frontDoor"]   = frontDoor;
 	doc["backDoor"]    = backDoor;
+	doc["distance"]    = distance;
 
 	serializeJson(doc, jsonLightStatus);
 	client.publish(topic.c_str(), jsonLightStatus.c_str());
