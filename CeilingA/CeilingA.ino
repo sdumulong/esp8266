@@ -65,7 +65,7 @@ String  subscribe_topics[10];
 
 bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
-unsigned long lastMsg   = 0;    //Horodatage du dernier message publié sur MQTT
+unsigned long lastMsg   = 0;        //Horodatage du dernier message publié sur MQTT
 String  activeColor = "#00000000";  //Light Value
 
 bool          rainbow = false;
