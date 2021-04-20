@@ -39,10 +39,7 @@ bool    	debug        = true; //Affiche sur la console si True
 
 
 int     	serverPort   = 80;
-int         pinRed       = D1;
-int         pinGreen     = D5;
-int         pinBlue      = D3;
-int         pinWhite     = D4;
+int         Relay        = D1;
 int     	microSwitch  = D8;
 
 const char* APssid   	= "FakeWindow";
@@ -60,15 +57,8 @@ String  subscribe_topics[10];
 
 bool    modeAccessPoint = false;
 String  mqtt_status = "Not connected";
-unsigned long lastMsg   = 0;    //Horodatage du dernier message publié sur MQTT
+unsigned long lastMsg   = 0;    	//Horodatage du dernier message publié sur MQTT
 String  activeColor = "#00000000";  //Light Value
-
-bool          rainbow = false;
-struct_color  rainbowColor;
-
-bool          christmas = false;
-struct_color  christmasColor;
-
 
 WiFiClient    espClient;  // @suppress("Abstract class cannot be instantiated")
 PubSubClient  client(espClient);
@@ -82,15 +72,7 @@ void setup() {
 	Serial.begin(SERIAL_BAUDRATE);   //Facultatif pour le debug
 	delay(10);
 
-	pinMode(pinRed,   OUTPUT);
-	pinMode(pinGreen, OUTPUT);
-	pinMode(pinBlue,  OUTPUT);
-	pinMode(pinWhite, OUTPUT);
-
-	analogWrite(pinRed,  0);
-	analogWrite(pinGreen,0);
-	analogWrite(pinBlue, 0);
-	analogWrite(pinWhite,0);
+	pinMode(Relay,   OUTPUT);
 
 	pinMode(microSwitch, INPUT);
 	Serial.println('\n');
@@ -344,12 +326,11 @@ void setup_mqtt() {
 // Initialise Subscribed topc
 //********************************************************************************
 void sub_Topics(){
-	 nb_subscribe_topics = 5;
+	 nb_subscribe_topics = 4;
 	 subscribe_topics[0] = String(conf.deviceID) + "/Config" ;
 	 subscribe_topics[1] = String(conf.deviceID) + "/Reset"  ;
 	 subscribe_topics[2] = String(conf.deviceID) + "/State"  ;
-	 subscribe_topics[3] = String(conf.deviceID) + "/Color"  ;
-	 subscribe_topics[4] = String(conf.deviceID) + "/Restart";
+	 subscribe_topics[3] = String(conf.deviceID) + "/Restart";
 }
 
 
@@ -513,8 +494,6 @@ void loop() {
 			lastMsg = now;
 			PublishLightStatus();
 		}
-		if (rainbow)   { SetRainbowColor();   }
-		if (christmas) { SetChristmasColor(); }
 	}
 }
 
@@ -560,15 +539,16 @@ void PublishLightStatus() {
 String jsonLightStatus;
 String topic = conf.deviceID  + "/Light";
 
+	bool lightState = digitalRead(D1);
+
 	StaticJsonDocument<64> doc;
-	if (activeColor == "#00000000") {
+	if (lightState == LOW) {
 		doc["Status"] = "Off";
 		doc["State"]  = 0;
 	} else {
 		doc["Status"] = "On";
 		doc["State"]  = 1;
 	}
-	doc["Color"]  = activeColor;
 	serializeJson(doc, jsonLightStatus);
 	client.publish(topic.c_str(), jsonLightStatus.c_str());
 
@@ -593,8 +573,7 @@ void TraiterMessageRecu(String topic, String payload) {
      SPIFFS.remove("/config.json");
      ESP.restart(); }
  if (topic == subscribe_topics[2]) { SetState(payload); }
- if (topic == subscribe_topics[3]) { SetColor(payload); }
- if (topic == subscribe_topics[4]) { ESP.restart();     }
+ if (topic == subscribe_topics[3]) { ESP.restart();     }
 }
 
 
@@ -659,121 +638,17 @@ String jsonStatus;
 void SetState(String payload) {
 String SaveActiveColor = activeColor;
 
-rainbow   = false;
-christmas = false;
 
   if (payload == "On") {
-	  colorRGB(ReadSavedColor());
+      digitalWrite(D1, HIGH);
 	  PublishLightStatus();
       return;
   }
   if (payload == "Off") {
-     colorRGB("#00000000");
+	  digitalWrite(D1, LOW);
      PublishLightStatus();
      return;
   }
-  if (payload == "BlinkRed") {
-	 if (SaveActiveColor != "#00000000") {
-	     colorRGB("#00000000");
-	     delay(500);
-	 }
-     for (int i=0; i<5; i++) {
-    	 colorRGB("#FF000000");
-    	 delay(500);
-    	 colorRGB("#00000000");
-    	 delay(500);
-     }
-	 colorRGB(SaveActiveColor);
-     return;
-  }
-  if (payload == "BlinkGreen") {
-	 if (SaveActiveColor != "#00000000") {
-	     colorRGB("#00000000");
-	     delay(500);
-	 }
-     for (int i=0; i<5; i++) {
-    	 colorRGB("#00FF0000");
-    	 delay(500);
-    	 colorRGB("#00000000");
-    	 delay(500);
-     }
-	 colorRGB(SaveActiveColor);
-     return;
-  }
-  if (payload == "BlinkBlue") {
-	 if (SaveActiveColor != "#00000000") {
-	     colorRGB("#00000000");
-	     delay(500);
-	 }
-     for (int i=0; i<5; i++) {
-    	 colorRGB("#0000FF00");
-    	 delay(500);
-    	 colorRGB("#00000000");
-    	 delay(500);
-     }
-	 colorRGB(SaveActiveColor);
-     return;
-  }
-  if (payload == "BlinkWhite") {
-	 if (SaveActiveColor != "#00000000") {
-	     colorRGB("#00000000");
-	     delay(500);
-	 }
-     for (int i=0; i<5; i++) {
-    	 colorRGB("#FFFFFFFF");
-    	 delay(500);
-    	 colorRGB("#00000000");
-    	 delay(500);
-     }
-	 colorRGB(SaveActiveColor);
-     return;
-  }
-  if (payload == "Blink") {
-	 String FSColor = ReadSavedColor();
-	 if (SaveActiveColor != "#00000000") {
-	     colorRGB("#00000000");
-	     delay(500);
-	 }
-     for (int i=0; i<5; i++) {
-    	 colorRGB(FSColor);
-    	 delay(500);
-    	 colorRGB("#00000000");
-    	 delay(500);
-     }
-	 colorRGB(SaveActiveColor);
-     return;
-  }
-  if (payload == "Rainbow") {
-	  colorRGB("#0100000A");
-	  rainbow            = true;
-	  rainbowColor.degre = 0;
-      return;
-  }
-  if (payload == "Christmas") {
-	  christmas            = true;
-	  christmasColor.degre = 0;
-      return;
-  }
-}
-
-
-
-//********************************************************************************
-// Set Color of Light in Hexa format #FFFFFFFF (4 colors)
-//********************************************************************************
-void SetColor(String payload) {
-
-	rainbow   = false;
-	christmas = false;
-
-	if (payload.substring(0,1) == "#") {
-		if (payload.length() < 8) {  payload += "00"; }
-		activeColor = payload;
-		SaveColorValue(activeColor);
-	  	colorRGB(activeColor);
- 	  	PublishLightStatus();
-	  	return;
-	}
 }
 
 
@@ -821,26 +696,6 @@ String jsonStatus;
 
 
 
-//****************************************************************************
-// Turn LED to Received color
-//****************************************************************************
-void colorRGB(String HexValue){
-
-  activeColor = HexValue;
-  unsigned long number = (unsigned long) strtoul( &HexValue[1], NULL, 16);
-
-  int subStringR = number >> 24;
-  int subStringG = number >> 16 & 0xFF;
-  int subStringB = number >> 8 & 0xFF;
-  int subStringW = number & 0xFF;
-
-  analogWrite(pinRed,map(subStringR, 0, 255, 0 ,1024));
-  analogWrite(pinGreen,map(subStringG, 0, 255, 0 ,1024));
-  analogWrite(pinBlue,map(subStringB, 0, 255, 0 ,1024));
-  analogWrite(pinWhite,map(subStringW, 0, 255, 0 ,1024));
-}
-
-
 //********************************************************************************
 // Read device state
 //********************************************************************************
@@ -863,76 +718,3 @@ String htmlPage;
 	 }
   }
 }
-
-
-
-//********************************************************************************
-// Set Rainbow Color
-//********************************************************************************
-void SetRainbowColor() {
-String HexValue;
-int    tmpRed   = 0;
-int    tmpGreen = 0;
-int    tmpBlue  = 0;
-
-	rainbowColor.degre++;
-
-	if (rainbowColor.degre >= 00 and rainbowColor.degre < 61 ) {             // 1   ++000000
-		tmpRed = map(rainbowColor.degre, 0, 60, 0 ,255);
-		if (tmpRed < 16) { HexValue = "#0" + String(tmpRed, HEX) + "00000A";
-		}else{ HexValue = "#"  + String(tmpRed, HEX) + "00000A";	}
-	}
-	if (rainbowColor.degre >= 61 and rainbowColor.degre < 121 ) {            // 2   FF++0000
-		tmpGreen = map(rainbowColor.degre, 61, 120, 0 ,255);
-		if (tmpGreen < 16) { HexValue = "#FF0" + String(tmpGreen, HEX) + "000A";
-		}else{ HexValue = "#FF"  + String(tmpGreen, HEX) + "000A";
-		}
-	}
-	if (rainbowColor.degre >= 121 and rainbowColor.degre < 181 ) {           // 3   --FF0000
-		tmpRed = map(rainbowColor.degre, 121, 180, 255 ,0);
-		if (tmpRed < 16) { HexValue = "#0" + String(tmpRed, HEX) + "FF000A";
-		}else{ HexValue = "#"  + String(tmpRed, HEX) + "FF000A";
-		}
-	}
-	if (rainbowColor.degre >= 181 and rainbowColor.degre < 241 ) {           // 4 	00FF++00
-		tmpBlue = map(rainbowColor.degre, 181, 240, 0 ,255);
-		if (tmpBlue < 16) {	HexValue = "#00FF0" + String(tmpBlue, HEX) + "0A";
-		}else{ HexValue = "#00FF"  + String(tmpBlue, HEX) + "0A";
-		}
-	}
-	if (rainbowColor.degre >= 241 and rainbowColor.degre < 301 ) {           // 5   00--FF00
-		tmpGreen = map(rainbowColor.degre, 241, 300, 255 , 0);
-		if (tmpGreen < 16) { HexValue = "#000" + String(tmpGreen, HEX) + "FF0A";
-		}else{ HexValue = "#00"  + String(tmpGreen, HEX) + "FF0A";
-		}
-	}
-	if (rainbowColor.degre >= 301 and rainbowColor.degre < 361 ) {           // 6   0000--00
-		tmpBlue  = map(rainbowColor.degre, 301, 360, 255 , 0);
-		if (tmpBlue < 16) {	HexValue = "#00000" + String(tmpBlue, HEX) + "0A";
-		}else{ HexValue = "#0000"  + String(tmpBlue, HEX) + "0A";
-		}
-	}
-	if (rainbowColor.degre >= 361) {
-		rainbowColor.degre = 0;
-		HexValue = "#0100000A";
-	}
-//	Serial.println(rainbowColor.degre);
-//	Serial.println(HexValue);
-	colorRGB(HexValue);
-}
-
-
-
-//********************************************************************************
-// Set Christmas Color
-//********************************************************************************
-void SetChristmasColor() {
-
-	christmasColor.degre++;
-	if (christmasColor.degre >= 00 and christmasColor.degre < 10 ) { colorRGB("#FF000000"); }
-	if (christmasColor.degre >= 10 and christmasColor.degre < 20 ) { colorRGB("#00FF0000"); }
-	if (christmasColor.degre >= 20 and christmasColor.degre < 30 ) { colorRGB("#0000FF00"); }
-	if (christmasColor.degre >= 30 and christmasColor.degre < 40 ) { colorRGB("#FFFFFFFF"); }
-	if (christmasColor.degre >= 40) { christmasColor.degre = 0; }
-}
-
